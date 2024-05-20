@@ -3,6 +3,9 @@ repos:
     rev: 5.0.4
     hooks:
       - id: flake8
+        args:
+          - --per-file-ignores= __init__.py:F401
+          - --max-line-length=120
   - repo: https://github.com/PyCQA/isort
     rev: 5.11.5
     hooks:
@@ -28,3 +31,4 @@ repos:
     rev: v2.2.1
     hooks:
       - id: codespell
+        args: [-L, fpr]
