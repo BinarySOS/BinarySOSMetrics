@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 from skimage import measure
+from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric
 from .utils import _TYPES, convert2gray, convert2iterable
@@ -51,7 +52,6 @@ class PD_FAMetric(BaseMetric):
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
 
         def evaluate_worker(self, label: np.array, pred: np.array) -> None:
-            size = label.shape
             # to unit8 for ``convert2gray()``
             label = label > 0  # sometimes is 0-1, force to 255.
             label = label.astype('uint8')
@@ -65,33 +65,18 @@ class PD_FAMetric(BaseMetric):
 
             for idx, threshold in enumerate(self.dis_thr):
                 image = measure.label(pred, connectivity=2)
-                coord_image = measure.regionprops(image)
+                coord_pred = measure.regionprops(image)
 
                 label = measure.label(label, connectivity=2)
                 coord_label = measure.regionprops(label)
 
-                distance_match = []
-                true_img = np.zeros(pred.shape)
-                for i in range(len(coord_label)):
-                    centroid_label = np.array(list(coord_label[i].centroid))
-                    for m in range(len(coord_image)):
-                        centroid_image = np.array(list(
-                            coord_image[m].centroid))
-                        distance = np.linalg.norm(centroid_image -
-                                                  centroid_label)
-
-                        if distance < threshold:
-                            # if match, remove pred object, and set ``true_img`` to 1 for compute number of pixel(FD).
-                            distance_match.append(distance)
-                            true_img[coord_image[m].coords[:, 0],
-                                     coord_image[m].coords[:, 1]] = 1
-                            del coord_image[m]
-                            break
+                AT, TD, FD, NP = self._calculate_tp_fn_fp(
+                    coord_label, coord_pred, threshold, pred)
                 with self.lock:
-                    self.AT[idx] += len(coord_label)
-                    self.FD[idx] += (pred - true_img).sum()
-                    self.NP[idx] += int(size[0] * size[1])
-                    self.TD[idx] += len(distance_match)
+                    self.AT[idx] += AT
+                    self.FD[idx] += FD
+                    self.NP[idx] += NP
+                    self.TD[idx] += TD
 
         if self.debug:
             start_time = time.time()
@@ -156,3 +141,46 @@ class PD_FAMetric(BaseMetric):
             'dis_thr', 'TD', 'AT', 'FD', 'NP', 'target_Pd', 'pixel_Fa'
         ]
         return df_pd_fa
+
+    def _calculate_tp_fn_fp(self, coord_label: List[RegionProperties],
+                            coord_pred: List[RegionProperties], threshold: int,
+                            pred_img: np.array):
+        """_summary_
+
+        Args:
+            coord_label (List[RegionProperties]): measure.regionprops(label)
+            coord_pred (List[RegionProperties]): measure.regionprops(pred)
+            threshold (int): _description_
+            pred_img (np.array): _description_
+
+        Returns:
+            _type_: _description_
+        """
+        centroid_lbl = np.array([prop.centroid for prop in coord_label
+                                 ]).astype(np.float32)  # N*2
+        centroid_pre = np.array([prop.centroid for prop in coord_pred
+                                 ]).astype(np.float32)  # M*2
+
+        num_lbl = centroid_lbl.shape[0]  # number of label
+        num_pred = centroid_pre.shape[0]  # number of pred
+        true_img = np.zeros(pred_img.shape)
+        if num_lbl * num_pred == 0:
+            # no lbl or no pred
+            TD = 0
+        else:
+            eul_distance = np.linalg.norm(centroid_lbl[:, None, :] -
+                                          centroid_pre[None, :, :],
+                                          axis=-1)  # num_lbl * num_pred
+            for i in range(num_lbl):
+                for j in range(num_pred):
+                    if eul_distance[i, j] < threshold:
+                        eul_distance[:, j] = np.inf  # Set inf to mark matched
+                        true_img[coord_pred[j].coords[:, 0],
+                                 coord_pred[j].coords[:, 1]] = 1
+                        break
+            TD = eul_distance[eul_distance == np.inf].size // num_lbl
+
+        FD = (pred_img - true_img).sum()
+        NP = pred_img.shape[0] * pred_img.shape[1]
+        AT = num_lbl
+        return AT, TD, FD, NP
