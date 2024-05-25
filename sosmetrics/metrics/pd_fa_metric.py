@@ -60,18 +60,19 @@ class PD_FAMetric(BaseMetric):
 
             # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
             # 'int64' is for measure.label().
-            pred = convert2gray(pred).astype('int64')
-            label = convert2gray(label).astype('int64')
+            gray_pred = convert2gray(pred).astype('int64')
+            gray_label = convert2gray(label).astype('int64')
+
+            image = measure.label(gray_pred, connectivity=2)
+            coord_pred = measure.regionprops(image)
+
+            image = measure.label(gray_label, connectivity=2)
+            coord_label = measure.regionprops(image)
+            distances = self._calculate_infos(coord_label, coord_pred)
 
             for idx, threshold in enumerate(self.dis_thr):
-                image = measure.label(pred, connectivity=2)
-                coord_pred = measure.regionprops(image)
-
-                label = measure.label(label, connectivity=2)
-                coord_label = measure.regionprops(label)
-
-                AT, TD, FD, NP = self._calculate_tp_fn_fp(
-                    coord_label, coord_pred, threshold, pred)
+                AT, TD, FD, NP = self._calculate_at_td_fd_np(
+                    distances.copy(), coord_pred, threshold, gray_pred)
                 with self.lock:
                     self.AT[idx] += AT
                     self.FD[idx] += FD
@@ -142,13 +143,49 @@ class PD_FAMetric(BaseMetric):
         ]
         return df_pd_fa
 
-    def _calculate_tp_fn_fp(self, coord_label: List[RegionProperties],
-                            coord_pred: List[RegionProperties], threshold: int,
-                            pred_img: np.array) -> Tuple[int, int, int, int]:
-        """_summary_
+    def _calculate_infos(self, coord_label: List[RegionProperties],
+                         coord_pred: List[RegionProperties]) -> np.array:
+        """calculate distances between label and pred. single image.
 
         Args:
             coord_label (List[RegionProperties]): measure.regionprops(label)
+            coord_pred (List[RegionProperties]): measure.regionprops(pred)
+            img (np.array): _description_
+
+        Raises:
+            NotImplementedError: _description_
+            NotImplementedError: _description_
+
+        Returns:
+            np.array: distances between label and pred. (num_lbl * num_pred)
+        """
+
+        num_lbl = len(coord_label)  # number of label
+        num_pred = len(coord_pred)  # number of pred
+
+        if num_lbl * num_pred == 0:
+            return np.empty(
+                (num_lbl,
+                 num_pred))  # gt=0 or pred=0, (num_lbl, 0) or (0, num_pred)
+
+        # eul distance
+        centroid_lbl = np.array([prop.centroid for prop in coord_label
+                                 ]).astype(np.float32)  # N*2
+        centroid_pred = np.array([prop.centroid for prop in coord_pred
+                                  ]).astype(np.float32)  # M*2
+        eul_distance = np.linalg.norm(centroid_lbl[:, None, :] -
+                                      centroid_pred[None, :, :],
+                                      axis=-1)  # num_lbl * num_pred
+
+        return eul_distance
+
+    def _calculate_at_td_fd_np(
+            self, distances: np.array, coord_pred: List[RegionProperties],
+            threshold: int, pred_img: np.array) -> Tuple[int, int, int, int]:
+        """_summary_
+
+        Args:
+            distances (np.array): distances in shape (num_lbl * num_pred)
             coord_pred (List[RegionProperties]): measure.regionprops(pred)
             threshold (int): _description_
             pred_img (np.array): _description_
@@ -156,29 +193,20 @@ class PD_FAMetric(BaseMetric):
         Returns:
             tuple[int, int, int, int]: AT, TD, FD, NP
         """
-        centroid_lbl = np.array([prop.centroid for prop in coord_label
-                                 ]).astype(np.float32)  # N*2
-        centroid_pre = np.array([prop.centroid for prop in coord_pred
-                                 ]).astype(np.float32)  # M*2
-
-        num_lbl = centroid_lbl.shape[0]  # number of label
-        num_pred = centroid_pre.shape[0]  # number of pred
+        num_lbl, num_pred = distances.shape
         true_img = np.zeros(pred_img.shape)
         if num_lbl * num_pred == 0:
             # no lbl or no pred
             TD = 0
         else:
-            eul_distance = np.linalg.norm(centroid_lbl[:, None, :] -
-                                          centroid_pre[None, :, :],
-                                          axis=-1)  # num_lbl * num_pred
             for i in range(num_lbl):
                 for j in range(num_pred):
-                    if eul_distance[i, j] < threshold:
-                        eul_distance[:, j] = np.inf  # Set inf to mark matched
+                    if distances[i, j] < threshold:
+                        distances[:, j] = np.inf  # Set inf to mark matched
                         true_img[coord_pred[j].coords[:, 0],
                                  coord_pred[j].coords[:, 1]] = 1
                         break
-            TD = eul_distance[eul_distance == np.inf].size // num_lbl
+            TD = distances[distances == np.inf].size // num_lbl
 
         FD = (pred_img - true_img).sum()
         NP = pred_img.shape[0] * pred_img.shape[1]
