@@ -1,6 +1,6 @@
 import threading
 import time
-from typing import Any, List, Union
+from typing import Any, List, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -144,7 +144,7 @@ class PD_FAMetric(BaseMetric):
 
     def _calculate_tp_fn_fp(self, coord_label: List[RegionProperties],
                             coord_pred: List[RegionProperties], threshold: int,
-                            pred_img: np.array):
+                            pred_img: np.array) -> Tuple[int, int, int, int]:
         """_summary_
 
         Args:
@@ -154,7 +154,7 @@ class PD_FAMetric(BaseMetric):
             pred_img (np.array): _description_
 
         Returns:
-            _type_: _description_
+            tuple[int, int, int, int]: AT, TD, FD, NP
         """
         centroid_lbl = np.array([prop.centroid for prop in coord_label
                                  ]).astype(np.float32)  # N*2
