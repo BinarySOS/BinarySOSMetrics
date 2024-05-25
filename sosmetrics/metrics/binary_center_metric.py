@@ -1,16 +1,19 @@
 import threading
 import time
-from typing import Any, List, Union
+from typing import Any, List, Tuple, Union
 
 import cv2
 import numpy as np
 import pandas as pd
+import torch
 from prettytable import PrettyTable
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
+from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric
-from .utils import _TYPES, convert2gray, convert2iterable
+from .utils import (_TYPES, bbox_overlaps, convert2gray, convert2iterable,
+                    target_mask_iou)
 
 
 class BinaryCenterMetric(BaseMetric):
@@ -20,6 +23,7 @@ class BinaryCenterMetric(BaseMetric):
                  conf_thr: float = 0.5,
                  dilate_kernel_size: List[int] = [7, 7],
                  match_alg: str = 'hungarian',
+                 iou_mode: str = 'none',
                  **kwargs: Any):
         """
         TP: True Positive, GT is Positive and Pred is Positive, If Euclidean Distance < threshold, matched.
@@ -35,9 +39,10 @@ class BinaryCenterMetric(BaseMetric):
             cong_thr (float, optional): confidence threshold. Defaults to 0.5.
             dilate_kernel_size (List[int], optional): kernel size of cv2.dilated.
                 The difference is that when [0, 0], the dilation algorithm will not be used. Defaults to [7, 7].
-            match_alg (str, optional): 'hungarian' or 'ergodic' to match pred and gt,
-                'ergodic'is the original implementation of PD_FA,
+            match_alg (str, optional): 'hungarian' or 'forloop' to match pred and gt,
+                'forloop'is the original implementation of PD_FA,
                 based on the first-match principle.Usually, hungarian is fast and accurate. Defaults to 'hungarian'.
+            iou_mode (str, optional): 'none', 'mask_iou', 'bbox_iou'. if not 'none', (eul_dis + '**_iou') for match.
         """
 
         super().__init__(**kwargs)
@@ -48,6 +53,7 @@ class BinaryCenterMetric(BaseMetric):
         self.conf_thr = conf_thr
         self.match_alg = match_alg
         self.dilate_kernel_size = dilate_kernel_size
+        self.iou_mode = iou_mode
         self.lock = threading.Lock()
         self.reset()
 
@@ -79,13 +85,15 @@ class BinaryCenterMetric(BaseMetric):
             pred = convert2gray(pred)
             dilated_pred = self._get_dilated(pred).astype('int64')
 
-            for idx, threshold in enumerate(self.dis_thr):
-                pred_img = measure.label(dilated_pred, connectivity=2)
-                coord_pred = measure.regionprops(pred_img)
-                label = measure.label(label, connectivity=2)
-                coord_label = measure.regionprops(label)
+            pred_img = measure.label(dilated_pred, connectivity=2)
+            coord_pred = measure.regionprops(pred_img)
+            label = measure.label(label, connectivity=2)
+            coord_label = measure.regionprops(label)
 
-                TP, FN, FP = self._calculate_tp_fn_fp(coord_label, coord_pred,
+            distances = self._calculate_infos(coord_label, coord_pred,
+                                              pred_img)
+            for idx, threshold in enumerate(self.dis_thr):
+                TP, FN, FP = self._calculate_tp_fn_fp(distances.copy(),
                                                       threshold)
                 with self.lock:
                     self.TP[idx] += TP
@@ -177,58 +185,124 @@ class BinaryCenterMetric(BaseMetric):
 
         return dilated_image
 
-    def _calculate_tp_fn_fp(self, coord_label: np.array, coord_pred: np.array,
-                            threshold: int):
+    def _calculate_infos(self, coord_label: List[RegionProperties],
+                         coord_pred: List[RegionProperties],
+                         img: np.array) -> np.array:
+        """calculate distances between label and pred. single image.
+
+        Args:
+            coord_label (List[RegionProperties]): measure.regionprops(label)
+            coord_pred (List[RegionProperties]): measure.regionprops(pred)
+            img (np.array): _description_
+
+        Raises:
+            NotImplementedError: _description_
+            NotImplementedError: _description_
+
+        Returns:
+            np.array: distances between label and pred. (num_lbl * num_pred)
+        """
+
+        num_lbl = len(coord_label)  # number of label
+        num_pred = len(coord_pred)  # number of pred
+
+        if num_lbl * num_pred == 0:
+            return np.empty(
+                (num_lbl,
+                 num_pred))  # gt=0 or pred=0, (num_lbl, 0) or (0, num_pred)
+
+        # eul distance
+        centroid_lbl = np.array([prop.centroid for prop in coord_label
+                                 ]).astype(np.float32)  # N*2
+        centroid_pred = np.array([prop.centroid for prop in coord_pred
+                                  ]).astype(np.float32)  # M*2
+        eul_distance = np.linalg.norm(centroid_lbl[:, None, :] -
+                                      centroid_pred[None, :, :],
+                                      axis=-1)  # num_lbl * num_pred
+
+        # bbox iou
+        bbox_lbl = torch.tensor([prop.bbox for prop in coord_label],
+                                dtype=torch.float32)  # N*4
+        bbox_pre = torch.tensor([prop.bbox for prop in coord_pred],
+                                dtype=torch.float32)  # M*4
+        bbox_iou = bbox_overlaps(
+            bbox_lbl, bbox_pre, mode='iou',
+            is_aligned=False).numpy()  # num_lbl * num_pred
+
+        # mask iou
+        pixel_coords_lbl = [prop.coords for prop in coord_label]
+        pixel_coords_pred = [prop.coords for prop in coord_pred]
+        gt_mask = np.zeros((num_lbl, *img.shape))  # [num_lbl, H, W]
+        pred_mask = np.zeros((num_pred, *img.shape))  # [num_pred, H, W]
+        for i in range(num_lbl):
+            gt_mask[i, pixel_coords_lbl[i][:, 0], pixel_coords_lbl[i][:,
+                                                                      1]] = 1
+        for i in range(num_pred):
+            pred_mask[i, pixel_coords_pred[i][:, 0],
+                      pixel_coords_pred[i][:, 1]] = 1
+        mask_iou = target_mask_iou(gt_mask, pred_mask)  # num_lbl * num_pred
+
+        if self.debug:
+            print(f'centroid_lbl={centroid_lbl}')
+            print(f'centroid_pred={centroid_pred}')
+            print(f'bbox_iou={bbox_iou}')
+            print(f'mask_iou={mask_iou}')
+            print(f'eul_distance={eul_distance}')
+            print('____' * 20)
+
+        if self.iou_mode == 'mask_iou':
+            reciprocal = np.reciprocal(mask_iou, where=mask_iou != 0)
+            return eul_distance + reciprocal
+        elif self.iou_mode == 'bbox_iou':
+            reciprocal = np.reciprocal(bbox_iou, where=bbox_iou != 0)
+            return eul_distance + reciprocal
+        elif self.iou_mode == 'none':
+            return eul_distance
+
+        else:
+            raise NotImplementedError(
+                f"{self.iou_mode} is not implemented, please use 'none', 'bbox_iou', 'mask_iou' for distances."
+            )
+
+    def _calculate_tp_fn_fp(self, distances: np.array,
+                            threshold: int) -> Tuple[int]:
         """_summary_
 
         Args:
-            gt_centroids (np.array): shape = (N,2)
-            pred_centroids (np.array): shape = (M,2)
-            threshold (int): threshold, Euclidean Distance.
+            distances (np.array): distances in shape (num_lbl * num_pred)
+            threshold (int): threshold of distances.
+
+        Raises:
+            NotImplementedError: _description_
 
         Returns:
-            _type_: _description_
+            _type_: TP, FN, FP
         """
-        TP = 0
-        FN = 0
-        FP = 0
-
-        if self.match_alg == 'hungarian':
-            centroid_lbl = np.array([prop.centroid for prop in coord_label])
-            centroid_pre = np.array([prop.centroid for prop in coord_pred])
-            if centroid_lbl.shape[0] == 0:
-                centroid_lbl = np.empty((0, 2))
-            if centroid_pre.shape[0] == 0:
-                centroid_pre = np.empty((0, 2))
-            eul_distance = np.linalg.norm(
-                centroid_lbl[:, None, :] - centroid_pre[None, :, :],
-                axis=-1)  # N*M, N==coord_label.shape, M = coord_pred.shape
-            row_indexes, col_indexes = linear_sum_assignment(eul_distance)
-            selec_distance = eul_distance[row_indexes, col_indexes]
-            TP = np.sum(selec_distance < threshold)
-            FP = len(coord_pred) - TP
-            FN = len(coord_label) - TP
-
-        elif self.match_alg == 'ergodic':
-            for i in range(len(coord_label)):
-                # get one gt centroid
-                centroid_label = np.array(list(coord_label[i].centroid))
-                for m in range(len(coord_pred)):
-                    # get one pred centroid
-                    centroid_image = np.array(list(coord_pred[m].centroid))
-                    # calculate
-                    distance = np.linalg.norm(centroid_image - centroid_label)
-
-                    if distance < threshold:
-                        TP += 1
-                        del coord_pred[m]  # remove matched pred object
-                        break
-            FP = len(coord_pred)
-            FN = len(coord_label) - TP
+        num_lbl, num_pred = distances.shape
+        if num_lbl * num_pred == 0:
+            # no lbl or no pred
+            TP = 0
         else:
-            raise NotImplementedError(
-                f"{self.match_alg} is not implemented, please use 'hungarian' or 'ergodic' for match_alg."
-            )
+            if self.match_alg == 'hungarian':
+                row_indexes, col_indexes = linear_sum_assignment(distances)
+                selec_distance = distances[row_indexes, col_indexes]
+                TP = np.sum(selec_distance < threshold)
+
+            elif self.match_alg == 'forloop':
+                for i in range(num_lbl):
+                    for j in range(num_pred):
+                        if distances[i, j] < threshold:
+                            distances[:, j] = np.inf  # Set inf to mark matched
+                            break
+                TP = distances[distances == np.inf].size // num_lbl
+
+            else:
+                raise NotImplementedError(
+                    f"{self.match_alg} is not implemented, please use 'hungarian' or 'forloop' for match_alg."
+                )
+
+        FP = num_pred - TP
+        FN = num_lbl - TP
 
         return TP, FN, FP
 
