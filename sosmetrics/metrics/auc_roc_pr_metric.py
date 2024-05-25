@@ -74,7 +74,7 @@ class AUC_ROC_PRMetric(BaseMetric):
         if self.print_table:
             head = ['AUC_ROC', 'AUC_PR']
             table = PrettyTable(head)
-            table.add_row([self.auc_roc.numpy(), self.auc_pr.numpy()])
+            table.add_row([self.auc_roc, self.auc_pr])
             print(table)
 
         return self.auc_roc, self.auc_pr, self.fpr.numpy(), self.tpr.numpy(
