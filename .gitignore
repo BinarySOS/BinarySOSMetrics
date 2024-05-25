@@ -3,3 +3,4 @@
 /.history
 *.egg-info
 /.vscode
+*.ipynb
