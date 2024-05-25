@@ -7,7 +7,8 @@ import pandas as pd
 import torch
 from prettytable import PrettyTable
 from sklearn.metrics import auc
-from torchmetrics.classification import BinaryPrecisionRecallCurve, BinaryROC
+from torchmetrics.classification import (BinaryAveragePrecision,
+                                         BinaryPrecisionRecallCurve, BinaryROC)
 
 from .base import BaseMetric
 from .utils import _TYPES, convert2iterable
@@ -29,6 +30,8 @@ class AUC_ROC_PRMetric(BaseMetric):
         self.lock = threading.Lock()
         self.roc_curve_fn = BinaryROC(thresholds=self.bins)
         self.pr_curve_fn = BinaryPrecisionRecallCurve(thresholds=self.bins)
+        # Average precision is not equal to auc_pr. This is due to the way the calculations are made
+        self.ap_fn = BinaryAveragePrecision(thresholds=self.bins)
         self.reset()
 
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
@@ -38,6 +41,7 @@ class AUC_ROC_PRMetric(BaseMetric):
             ten_gt = torch.from_numpy(label).to(torch.int64)
             self.roc_curve_fn.update(ten_pred, ten_gt)
             self.pr_curve_fn.update(ten_pred, ten_gt)
+            self.ap_fn.update(ten_pred, ten_gt)
 
         if self.debug:
             start_time = time.time()
@@ -71,14 +75,15 @@ class AUC_ROC_PRMetric(BaseMetric):
         self.precision, self.recall, _ = self.pr_curve_fn.compute()
         self.auc_roc = auc(self.fpr, self.tpr)
         self.auc_pr = auc(self.recall, self.precision)
+        self.ap = self.ap_fn.compute().numpy()
         if self.print_table:
-            head = ['AUC_ROC', 'AUC_PR']
+            head = ['AUC_ROC', 'AUC_PR', 'AP']
             table = PrettyTable(head)
-            table.add_row([self.auc_roc, self.auc_pr])
+            table.add_row([self.auc_roc, self.auc_pr, self.ap])
             print(table)
 
         return self.auc_roc, self.auc_pr, self.fpr.numpy(), self.tpr.numpy(
-        ), self.precision.numpy(), self.recall.numpy()
+        ), self.precision.numpy(), self.recall.numpy(), self.ap
 
     def reset(self):
         self.roc_curve_fn.reset()
@@ -86,8 +91,8 @@ class AUC_ROC_PRMetric(BaseMetric):
 
     @property
     def table(self):
-        all_metric = np.stack([self.auc_roc.numpy(),
-                               self.auc_pr.numpy()])[:, np.newaxis].T
+        all_metric = np.stack([self.auc_roc, self.auc_pr,
+                               self.ap])[:, np.newaxis].T
         df = pd.DataFrame(all_metric)
-        df.columns = ['AUC_ROC', 'AUC_PR']
+        df.columns = ['AUC_ROC', 'AUC_PR', 'AP']
         return df
