@@ -55,8 +55,9 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
         else:
             raise NotImplementedError
 
-        if self.debug:
-            print(f'Time for update: {time.time() - start_time}')
+        print(
+            f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
+        )
 
     def get(self):
         self.recall = self.tp / (self.tp + self.fn + 1e-10)

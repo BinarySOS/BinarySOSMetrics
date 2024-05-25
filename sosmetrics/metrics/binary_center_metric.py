@@ -117,10 +117,9 @@ class BinaryCenterMetric(BaseMetric):
         # for thread in threads:
         #     thread.join()
 
-        if self.debug:
-            print(
-                f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
-            )
+        print(
+            f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
+        )
 
     def get(self):
         """Compute metric

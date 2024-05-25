@@ -64,10 +64,9 @@ class AUC_ROC_PRMetric(BaseMetric):
         else:
             raise NotImplementedError
 
-        if self.debug:
-            print(
-                f'{self.__class__.__name__} spend time for update:{time.time() - start_time}'
-            )
+        print(
+            f'{self.__class__.__name__} spend time for update:{time.time() - start_time}'
+        )
 
     def get(self):
 
