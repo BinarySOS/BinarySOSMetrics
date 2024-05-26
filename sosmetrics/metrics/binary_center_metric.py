@@ -227,10 +227,10 @@ class BinaryCenterMetric(BaseMetric):
         # bbox iou
         bbox_lbl = torch.tensor([prop.bbox for prop in coord_label],
                                 dtype=torch.float32)  # N*4
-        bbox_pre = torch.tensor([prop.bbox for prop in coord_pred],
-                                dtype=torch.float32)  # M*4
+        bbox_pred = torch.tensor([prop.bbox for prop in coord_pred],
+                                 dtype=torch.float32)  # M*4
         bbox_iou = bbox_overlaps(
-            bbox_lbl, bbox_pre, mode='iou',
+            bbox_lbl, bbox_pred, mode='iou',
             is_aligned=False).numpy()  # num_lbl * num_pred
 
         # mask iou
