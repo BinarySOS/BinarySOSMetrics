@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import Any, List, Tuple, Union
 
 import cv2
@@ -11,7 +10,7 @@ from scipy.optimize import linear_sum_assignment
 from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
-from .base import BaseMetric
+from .base import BaseMetric, time_cost_deco
 from .utils import (_TYPES, _adjust_conf_thr_arg, _adjust_dis_thr_arg,
                     bbox_overlaps, convert2gray, convert2iterable,
                     target_mask_iou)
@@ -104,6 +103,7 @@ class BinaryCenterMetric(BaseMetric):
         self.lock = threading.Lock()
         self.reset()
 
+    @time_cost_deco
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
         """Support CHW, BCHW, HWC,BHWC, Image Path, or in their list form (except BHWC/BCHW),
             like [CHW, CHW, ...], [HWC, HWC, ...], [Image Path, Image Path, ...].
@@ -132,8 +132,6 @@ class BinaryCenterMetric(BaseMetric):
                     self.FN[idx] += FN
             return
 
-        start_time = time.time()
-
         labels, preds = convert2iterable(labels, preds)
 
         for i in range(len(labels)):
@@ -147,10 +145,7 @@ class BinaryCenterMetric(BaseMetric):
         # for thread in threads:
         #     thread.join()
 
-        print(
-            f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
-        )
-
+    @time_cost_deco
     def get(self):
         """Compute metric
 
@@ -324,6 +319,10 @@ class BinaryCenterMetric(BaseMetric):
             self.Precision + self.Recall,
             np.finfo(np.float64).eps)
 
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(dilate_kernel_size={self.dilate_kernel_size}, \
+            match_alg={self.match_alg}, iou_mode={self.iou_mode})'
+
 
 class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
 
@@ -335,6 +334,7 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
                  iou_mode: str = 'none',
                  **kwargs: Any):
         """
+        Compute AP for each dis_thr, and Precision, Recall, F1 for each dis_thr and conf_thr.
         NOTE:
             - For conf thresholds, we refer to torchmetrics using the `>=` for conf thresholds.
                 https://github.com/Lightning-AI/torchmetrics/blob/3f112395b1ca0141ad2d8622628110fa363f9953/src/torchmetrics/functional/classification/precision_recall_curve.py#L22
@@ -367,6 +367,7 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         self.conf_thr = _adjust_conf_thr_arg(conf_thr)
         self.reset()
 
+    @time_cost_deco
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
         """Support CHW, BCHW, HWC,BHWC, Image Path, or in their list form (except BHWC/BCHW),
             like [CHW, CHW, ...], [HWC, HWC, ...], [Image Path, Image Path, ...].
@@ -398,8 +399,6 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
                         self.FN[jdx, idx] += FN
             return
 
-        start_time = time.time()
-
         labels, preds = convert2iterable(labels, preds)
 
         for i in range(len(labels)):
@@ -413,10 +412,7 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         # for thread in threads:
         #     thread.join()
 
-        print(
-            f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
-        )
-
+    @time_cost_deco
     def get(self) -> Tuple[np.ndarray]:
         """Compute metric
 
@@ -425,7 +421,6 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         """
 
         self._calculate_precision_recall_f1()
-        # print('Average Update Spend {:0.2f}s.'.format(sum(self.time_cost)/len(self.time_cost)))
 
         precision = np.concatenate(
             [self.Precision, np.ones((len(self.Precision), 1))], axis=1)
@@ -452,7 +447,6 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         self.Precision = np.zeros((len(self.dis_thr), len(self.conf_thr)))
         self.Recall = np.zeros((len(self.dis_thr), len(self.conf_thr)))
         self.F1 = np.zeros((len(self.dis_thr), len(self.conf_thr)))
-        self.time_cost = []
 
     @property
     def table(self):

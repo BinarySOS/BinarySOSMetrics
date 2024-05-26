@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import Any, List, Tuple, Union
 
 import numpy as np
@@ -8,8 +7,8 @@ from prettytable import PrettyTable
 from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
-from .base import BaseMetric
-from .utils import _TYPES, convert2gray, convert2iterable
+from .base import BaseMetric, time_cost_deco
+from .utils import _TYPES, _adjust_dis_thr_arg, convert2gray, convert2iterable
 
 
 class PD_FAMetric(BaseMetric):
@@ -40,15 +39,14 @@ class PD_FAMetric(BaseMetric):
                 if List, closed interval. . Defaults to [1,10].
         """
         super().__init__(**kwargs)
-        if isinstance(dis_thr, int):
-            self.dis_thr = np.array([dis_thr])
-        else:
-            self.dis_thr = np.arange(dis_thr[0], dis_thr[1] + 1)
+        self.dis_thr = _adjust_dis_thr_arg(dis_thr)
+
         self.conf_thr = conf_thr
 
         self.lock = threading.Lock()
         self.reset()
 
+    @time_cost_deco
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
 
         def evaluate_worker(self, label: np.array, pred: np.array) -> None:
@@ -79,9 +77,6 @@ class PD_FAMetric(BaseMetric):
                     self.NP[idx] += NP
                     self.TD[idx] += TD
 
-        if self.debug:
-            start_time = time.time()
-
         # Packaged in the format we need, bhwc of np.array or hwc of list.
         labels, preds = convert2iterable(labels, preds)
 
@@ -98,10 +93,7 @@ class PD_FAMetric(BaseMetric):
         for thread in threads:
             thread.join()
 
-        print(
-            f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
-        )
-
+    @time_cost_deco
     def get(self):
         self.FA = self.FD / self.NP
         self.PD = self.TD / self.AT

@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import Any
 
 import numpy as np
@@ -7,7 +6,7 @@ import pandas as pd
 from prettytable import PrettyTable
 from sklearn.metrics import confusion_matrix
 
-from .base import BaseMetric
+from .base import BaseMetric, time_cost_deco
 from .utils import _TYPES, convert2iterable
 
 
@@ -24,6 +23,7 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
         self.lock = threading.Lock()
         self.reset()
 
+    @time_cost_deco
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
 
         def evaluate_worker(self, label: np.array, pred: np.array):
@@ -33,9 +33,6 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
                 self.fp[0] += fp
                 self.fn[0] += fn
                 self.tn[0] += tn
-
-        if self.debug:
-            start_time = time.time()
 
         labels, preds = convert2iterable(labels, preds)
         if isinstance(labels, np.ndarray):
@@ -55,10 +52,7 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
         else:
             raise NotImplementedError
 
-        print(
-            f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
-        )
-
+    @time_cost_deco
     def get(self):
         self.recall = self.tp / (self.tp + self.fn + 1e-10)
         self.precision = self.tp / (self.tp + self.fp + 1e-10)

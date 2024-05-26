@@ -1,5 +1,4 @@
 import threading
-import time
 from typing import Any
 
 import numpy as np
@@ -10,7 +9,7 @@ from sklearn.metrics import auc
 from torchmetrics.classification import (BinaryAveragePrecision,
                                          BinaryPrecisionRecallCurve, BinaryROC)
 
-from .base import BaseMetric
+from .base import BaseMetric, time_cost_deco
 from .utils import _TYPES, convert2iterable
 
 
@@ -34,6 +33,7 @@ class AUC_ROC_PRMetric(BaseMetric):
         self.ap_fn = BinaryAveragePrecision(thresholds=self.bins)
         self.reset()
 
+    @time_cost_deco
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
 
         def evaluate_worker(self, label: np.array, pred: np.array):
@@ -42,9 +42,6 @@ class AUC_ROC_PRMetric(BaseMetric):
             self.roc_curve_fn.update(ten_pred, ten_gt)
             self.pr_curve_fn.update(ten_pred, ten_gt)
             self.ap_fn.update(ten_pred, ten_gt)
-
-        if self.debug:
-            start_time = time.time()
 
         labels, preds = convert2iterable(labels, preds)
 
@@ -64,10 +61,7 @@ class AUC_ROC_PRMetric(BaseMetric):
         else:
             raise NotImplementedError
 
-        print(
-            f'{self.__class__.__name__} spend time for update:{time.time() - start_time}'
-        )
-
+    @time_cost_deco
     def get(self):
 
         self.fpr, self.tpr, _ = self.roc_curve_fn.compute()
@@ -75,6 +69,7 @@ class AUC_ROC_PRMetric(BaseMetric):
         self.auc_roc = auc(self.fpr, self.tpr)
         self.auc_pr = auc(self.recall, self.precision)
         self.ap = self.ap_fn.compute().numpy()
+
         if self.print_table:
             head = ['AUC_ROC', 'AUC_PR', 'AP']
             table = PrettyTable(head)
