@@ -65,7 +65,7 @@ def convert2batch(labels: np.array,
 
 def convert2iterable(labels: _TYPES,
                      preds: _TYPES) -> Tuple[Iterable, Iterable]:
-    """Convert labels and preds to Iterable, bhwc or [hwc, ...].
+    """Convert labels and preds to Iterable, bhwc or [hwc, ...] and scale preds to 0-1.
         Preds must be probability image in 0-1.
         If path, we will grayscale it and /255 to 0-1.
 
@@ -87,6 +87,10 @@ def convert2iterable(labels: _TYPES,
         labels, preds = channels2last(labels, preds)
         #  hwc -> bhwc
         labels, preds = convert2batch(labels, preds)
+
+        if np.any((preds < 255) & (preds > 1)):
+            # convert to 0-1, if preds is not probability image.
+            preds = preds / 255.0
         return labels, preds
 
     if isinstance(labels, str):
@@ -103,7 +107,7 @@ def convert2iterable(labels: _TYPES,
             for label in labels
         ]
         preds = [
-            cv2.imread(pred, cv2.IMREAD_GRAYSCALE)[..., None] / 255
+            cv2.imread(pred, cv2.IMREAD_GRAYSCALE)[..., None] / 255.
             for pred in preds
         ]
         return labels, preds
@@ -114,11 +118,20 @@ def convert2iterable(labels: _TYPES,
             label.detach().cpu().numpy()
             if isinstance(label, torch.Tensor) else label for label in labels
         ]
-        preds = [
-            pred.detach().cpu().numpy()
-            if isinstance(pred, torch.Tensor) else pred for pred in preds
-        ]
+        # preds = [
+        #     pred.detach().cpu().numpy()
+        #     if isinstance(pred, torch.Tensor) else pred for pred in preds
+        # ]
 
+        new_preds = []
+        for pred in preds:
+            if isinstance(pred, torch.Tensor):
+                pred = pred.detach().cpu().numpy()
+            if np.any((pred < 255) & (pred > 1)):
+                # convert to 0-1, if preds is not probability image.
+                pred = pred / 255.
+            new_preds.append(pred)
+        preds = new_preds
         tmp = [
             channels2last(label, pred) for label, pred in zip(labels, preds)
         ]
