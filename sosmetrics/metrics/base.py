@@ -73,3 +73,6 @@ class BaseMetric:
     @property
     def table(self):
         raise NotImplementedError
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}'
