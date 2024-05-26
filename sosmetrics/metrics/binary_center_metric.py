@@ -12,8 +12,51 @@ from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric
-from .utils import (_TYPES, bbox_overlaps, convert2gray, convert2iterable,
+from .utils import (_TYPES, _adjust_conf_thr_arg, _adjust_dis_thr_arg,
+                    bbox_overlaps, convert2gray, convert2iterable,
                     target_mask_iou)
+
+
+def _get_dilated(image: np.ndarray,
+                 dilate_kernel_size: List[int] = [0, 0]) -> np.ndarray:
+    """_summary_
+
+    Args:
+        image (np.ndarray): hwc of np.ndarray.
+    """
+
+    kernel = np.ones(dilate_kernel_size, np.uint8)
+    if kernel.sum() == 0:
+        return image
+    dilated_image = cv2.dilate(image, kernel, iterations=1)
+
+    return dilated_image
+
+
+def _get_label_coord(label: np.ndarray) -> List[RegionProperties]:
+    label = label > 0  # sometimes is 0-1, force to 255.
+    label = label.astype('uint8')
+    label = convert2gray(label).astype('int64')
+    label = measure.label(label, connectivity=2)
+    coord_label = measure.regionprops(label)
+    return coord_label
+
+
+def _get_pred_coord(
+        pred: np.ndarray,
+        conf_thr: float,
+        dilate_kernel_size: List[int] = [0, 0]) -> List[RegionProperties]:
+    cur_pred = pred >= conf_thr
+    cur_pred = cur_pred.astype('uint8')
+    # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
+    # 'int64' is for measure.label().
+
+    cur_pred = convert2gray(cur_pred)
+    dilated_pred = _get_dilated(cur_pred, dilate_kernel_size).astype('int64')
+
+    pred_img = measure.label(dilated_pred, connectivity=2)
+    coord_pred = measure.regionprops(pred_img)
+    return coord_pred
 
 
 class BinaryCenterMetric(BaseMetric):
@@ -33,9 +76,16 @@ class BinaryCenterMetric(BaseMetric):
         Precision: TP/(TP+FP).
         F1: 2*Precision*Recall/(Precision+Recall).
         .get will return Precision, Recall, F1 in array.
+
         Args:
-            dis_thr (Union[List[int], int], optional): dis_thr of Euclidean distance,
-                if List, closed interval. Defaults to [1, 10].
+            dis_thr (Union[List[float], int], optional): dis_thr of Euclidean distance,
+                - If set to an `int` , will use this value to distance threshold.
+                - If set to an `list` of float or int, will use the indicated thresholds \
+                    in the list as bins for the calculation
+                - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
+                bins for the calculation.
+                if List, closed interval.
+                Defaults to [1, 10].
             cong_thr (float, optional): confidence threshold. Defaults to 0.5.
             dilate_kernel_size (List[int], optional): kernel size of cv2.dilated.
                 The difference is that when [0, 0], the dilation algorithm will not be used. Defaults to [7, 7].
@@ -46,11 +96,8 @@ class BinaryCenterMetric(BaseMetric):
         """
 
         super().__init__(**kwargs)
-        if isinstance(dis_thr, int):
-            self.dis_thr = np.array([dis_thr])
-        else:
-            self.dis_thr = np.arange(dis_thr[0], dis_thr[1] + 1)
-        self.conf_thr = conf_thr
+        self.dis_thr = _adjust_dis_thr_arg(dis_thr)
+        self.conf_thr = np.array([conf_thr])
         self.match_alg = match_alg
         self.dilate_kernel_size = dilate_kernel_size
         self.iou_mode = iou_mode
@@ -72,26 +119,10 @@ class BinaryCenterMetric(BaseMetric):
         """
 
         def evaluate_worker(label, pred):
-            # to unit8 for ``convert2gray()``
-            label = label > 0  # sometimes is 0-1, force to 255.
-            label = label.astype('uint8')
-            pred = pred > self.conf_thr
-            pred = pred.astype('uint8')
-
-            # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
-            # 'int64' is for measure.label().
-
-            label = convert2gray(label).astype('int64')
-            pred = convert2gray(pred)
-            dilated_pred = self._get_dilated(pred).astype('int64')
-
-            pred_img = measure.label(dilated_pred, connectivity=2)
-            coord_pred = measure.regionprops(pred_img)
-            label = measure.label(label, connectivity=2)
-            coord_label = measure.regionprops(label)
-
-            distances = self._calculate_infos(coord_label, coord_pred,
-                                              pred_img)
+            coord_label = _get_label_coord(label)
+            coord_pred = _get_pred_coord(pred.copy(), self.conf_thr,
+                                         self.dilate_kernel_size)
+            distances = self._calculate_infos(coord_label, coord_pred, pred)
             for idx, threshold in enumerate(self.dis_thr):
                 TP, FN, FP = self._calculate_tp_fn_fp(distances.copy(),
                                                       threshold)
@@ -101,8 +132,7 @@ class BinaryCenterMetric(BaseMetric):
                     self.FN[idx] += FN
             return
 
-        if self.debug:
-            start_time = time.time()
+        start_time = time.time()
 
         labels, preds = convert2iterable(labels, preds)
 
@@ -127,13 +157,8 @@ class BinaryCenterMetric(BaseMetric):
         Returns:
             _type_: Precision, Recall, micro-F1, shape == [1, num_threshold].
         """
-        self.Precision = self.TP / (self.TP + self.FP)
-        self.Recall = self.TP / (self.TP + self.FN)
-        # micro F1 socre.
-        self.F1 = 2 * self.Precision * self.Recall / (self.Precision +
-                                                      self.Recall)
-
-        head = ['Threshold']
+        self._calculate_precision_recall_f1()
+        head = ['Dis-Thr']
         head.extend(self.dis_thr.tolist())
         table = PrettyTable()
         table.add_column('Threshold', self.dis_thr)
@@ -169,37 +194,22 @@ class BinaryCenterMetric(BaseMetric):
         df.columns = ['dis_thr', 'TP', 'FP', 'FN', 'Precision', 'Recall', 'F1']
         return df
 
-    def _get_dilated(self, image: np.array):
-        """_summary_
-
-        Args:
-            image (np.array): hwc of np.array.
-        """
-
-        kernel = np.ones(self.dilate_kernel_size, np.uint8)
-        if kernel.sum() == 0:
-            return image
-
-        dilated_image = cv2.dilate(image, kernel, iterations=1)
-
-        return dilated_image
-
     def _calculate_infos(self, coord_label: List[RegionProperties],
                          coord_pred: List[RegionProperties],
-                         img: np.array) -> np.array:
+                         img: np.ndarray) -> np.ndarray:
         """calculate distances between label and pred. single image.
 
         Args:
             coord_label (List[RegionProperties]): measure.regionprops(label)
             coord_pred (List[RegionProperties]): measure.regionprops(pred)
-            img (np.array): _description_
+            img (np.ndarray): _description_
 
         Raises:
             NotImplementedError: _description_
             NotImplementedError: _description_
 
         Returns:
-            np.array: distances between label and pred. (num_lbl * num_pred)
+            np.ndarray: distances between label and pred. (num_lbl * num_pred)
         """
 
         num_lbl = len(coord_label)  # number of label
@@ -263,12 +273,12 @@ class BinaryCenterMetric(BaseMetric):
                 f"{self.iou_mode} is not implemented, please use 'none', 'bbox_iou', 'mask_iou' for distances."
             )
 
-    def _calculate_tp_fn_fp(self, distances: np.array,
+    def _calculate_tp_fn_fp(self, distances: np.ndarray,
                             threshold: int) -> Tuple[int]:
         """_summary_
 
         Args:
-            distances (np.array): distances in shape (num_lbl * num_pred)
+            distances (np.ndarray): distances in shape (num_lbl * num_pred)
             threshold (int): threshold of distances.
 
         Raises:
@@ -305,43 +315,58 @@ class BinaryCenterMetric(BaseMetric):
 
         return TP, FN, FP
 
+    def _calculate_precision_recall_f1(self):
+        self.Precision = self.TP / np.maximum(self.TP + self.FP,
+                                              np.finfo(np.float64).eps)
+        self.Recall = self.TP / (self.TP + self.FN)
+        # micro F1 socre.
+        self.F1 = 2 * self.Precision * self.Recall / np.maximum(
+            self.Precision + self.Recall,
+            np.finfo(np.float64).eps)
 
-class BinaryCenterAveragePrecisionMetric(BaseMetric):
+
+class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
 
     def __init__(self,
-                 dis_thr: Union[List[int], int] = 10,
-                 bins: int = 50,
+                 dis_thr: Union[List[int], int] = [1, 10],
+                 conf_thr: Union[int, List[float], np.ndarray] = 10,
                  dilate_kernel_size: List[int] = [7, 7],
                  match_alg: str = 'hungarian',
+                 iou_mode: str = 'none',
                  **kwargs: Any):
         """
-        TP: True Positive, GT is Positive and Pred is Positive, If Euclidean Distance < threshold, matched.
-        FN: False Negative, GT is Positive and Pred is Negative.
-        FP: False Positive, GT is Negative and Pred is Positive. If Euclidean Distance > threshold, not matched.
-        Recall: TP/(TP+FN).
-        Precision: TP/(TP+FP).
-        F1: 2*Precision*Recall/(Precision+Recall).
-        .get will return Precision, Recall, F1 in array.
-        Args:
-            dis_thr (Union[List[int], int], optional): dis_thr of Euclidean distance,
-                if List, closed interval. Defaults to [1, 10].
-            cong_thr (float, optional): confidence threshold. Defaults to 0.5.
-            dilate_kernel_size (List[int], optional): kernel size of cv2.dilated.
-                The difference is that when [0, 0], the dilation algorithm will not be used. Defaults to [7, 7].
-            match_alg (str, optional): 'hungarian' or 'ergodic' to match pred and gt,
-                'ergodic'is the original implementation of PD_FA,
-                based on the first-match principle.Usually, hungarian is fast and accurate. Defaults to 'hungarian'.
-        """
+        NOTE:
+            - For conf thresholds, we refer to torchmetrics using the `>=` for conf thresholds.
+                https://github.com/Lightning-AI/torchmetrics/blob/3f112395b1ca0141ad2d8622628110fa363f9953/src/torchmetrics/functional/classification/precision_recall_curve.py#L22
 
-        super().__init__(**kwargs)
-        self.bins = bins
-        self.dis_thr = dis_thr
-        self.match_alg = match_alg
-        self.dilate_kernel_size = dilate_kernel_size
-        self.lock = threading.Lock()
+            - For the calculation of AP, we refer to torchmetrics.
+                Step.1. Precision, Recall, we calculate the pr-curve from a multi threshold confusion matrix:
+                https://github.com/Lightning-AI/torchmetrics/blob/3f112395b1ca0141ad2d8622628110fa363f9953/src/torchmetrics/functional/classification/precision_recall_curve.py#L265
+
+                Step.2. AP:
+                https://github.com/Lightning-AI/torchmetrics/blob/3f112395b1ca0141ad2d8622628110fa363f9953/src/torchmetrics/functional/classification/average_precision.py#L70
+
+         Args:
+            cong_thr (float, optional):
+                - If set to an `int` (larger than 1), will use that number of thresholds linearly spaced from
+                0 to 1 as bins for the calculation.
+                - If set to an `list` of floats, will use the indicated thresholds \
+                    in the list as bins for the calculation
+                - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
+                bins for the calculation.
+
+            Other parameters are the same as BinaryCenterMetric.
+        """
+        super().__init__(dis_thr=dis_thr,
+                         conf_thr=0.5,
+                         dilate_kernel_size=dilate_kernel_size,
+                         match_alg=match_alg,
+                         iou_mode=iou_mode,
+                         **kwargs)
+
+        self.conf_thr = _adjust_conf_thr_arg(conf_thr)
         self.reset()
 
-    # TODO: support AP.
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
         """Support CHW, BCHW, HWC,BHWC, Image Path, or in their list form (except BHWC/BCHW),
             like [CHW, CHW, ...], [HWC, HWC, ...], [Image Path, Image Path, ...].
@@ -357,36 +382,23 @@ class BinaryCenterAveragePrecisionMetric(BaseMetric):
         """
 
         def evaluate_worker(label, pred):
-            # to unit8 for ``convert2gray()``
-            label = label > 0  # sometimes is 0-1, force to 255.
-            label = label.astype('uint8')
-            pred = pred > self.ap_fn
-            pred = pred.astype('uint8')
+            coord_label = _get_label_coord(label)
 
-            # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
-            # 'int64' is for measure.label().
-
-            label = convert2gray(label).astype('int64')
-            pred = convert2gray(pred)
-            dilated_pred = self._get_dilated(pred).astype('int64')
-
-            for idx, threshold in enumerate(self.dis_thr):
-
-                pred_img = measure.label(dilated_pred, connectivity=2)
-                coord_pred = measure.regionprops(pred_img)
-                label = measure.label(label, connectivity=2)
-                coord_label = measure.regionprops(label)
-
-                TP, FN, FP = self._calculate_tp_fn_fp(coord_label, coord_pred,
-                                                      self.dis_thr)
-                with self.lock:
-                    self.TP[idx] += TP
-                    self.FP[idx] += FP
-                    self.FN[idx] += FN
+            for idx, conf_thr in enumerate(self.conf_thr):
+                coord_pred = _get_pred_coord(pred.copy(), conf_thr,
+                                             self.dilate_kernel_size)
+                distances = self._calculate_infos(coord_label, coord_pred,
+                                                  pred)
+                for jdx, threshold in enumerate(self.dis_thr):
+                    TP, FN, FP = self._calculate_tp_fn_fp(
+                        distances.copy(), threshold)
+                    with self.lock:
+                        self.TP[jdx, idx] += TP
+                        self.FP[jdx, idx] += FP
+                        self.FN[jdx, idx] += FN
             return
 
-        if self.debug:
-            start_time = time.time()
+        start_time = time.time()
 
         labels, preds = convert2iterable(labels, preds)
 
@@ -401,125 +413,50 @@ class BinaryCenterAveragePrecisionMetric(BaseMetric):
         # for thread in threads:
         #     thread.join()
 
-        if self.debug:
-            print(
-                f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
-            )
+        print(
+            f'{self.__class__.__name__} spend time for update: {time.time() - start_time}'
+        )
 
-    def get(self):
+    def get(self) -> Tuple[np.ndarray]:
         """Compute metric
 
         Returns:
-            _type_: Precision, Recall, micro-F1, shape == [1, num_threshold].
+            _type_: .self.Precision, self.Recall, self.F1 in [dis_thr, conf_thr], self.AP in [1, dis_thr]
         """
-        self.Precision = self.TP / (self.TP + self.FP)
-        self.Recall = self.TP / (self.TP + self.FN)
-        # micro F1 socre.
-        self.F1 = 2 * self.Precision * self.Recall / (self.Precision +
-                                                      self.Recall)
 
-        head = ['Threshold']
-        head.extend(self.dis_thr.tolist())
+        self._calculate_precision_recall_f1()
+        # print('Average Update Spend {:0.2f}s.'.format(sum(self.time_cost)/len(self.time_cost)))
+
+        precision = np.concatenate(
+            [self.Precision, np.ones((len(self.Precision), 1))], axis=1)
+        recall = np.concatenate(
+            [self.Recall, np.zeros((len(self.Recall), 1))], axis=1)
+        self.AP = -np.sum(
+            (recall[:, 1:] - recall[:, :-1]) * precision[:, :-1], axis=1)
+
         table = PrettyTable()
-        table.add_column('Threshold', self.dis_thr)
-        table.add_column('TP', ['{:.0f}'.format(num) for num in self.TP])
-        table.add_column('FP', ['{:.0f}'.format(num) for num in self.FP])
-        table.add_column('FN', ['{:.0f}'.format(num) for num in self.FN])
-        table.add_column('target_Precision',
-                         ['{:.5f}'.format(num) for num in self.Precision])
-        table.add_column('target_Recall',
-                         ['{:.5f}'.format(num) for num in self.Recall])
-        table.add_column('target_F1score',
-                         ['{:.5f}'.format(num) for num in self.F1])
+        head = ['Dis—Thr']
+        head.extend(self.dis_thr.tolist())
+        table.field_names = head
+        ap_row = ['AP']
+        ap_row.extend(['{:.5f}'.format(num) for num in self.AP])
+        table.add_row(ap_row)
         print(table)
 
-        return self.Precision, self.Recall, self.F1
+        return self.Precision, self.Recall, self.F1, self.AP
 
     def reset(self):
-        self.TP = np.zeros_like(self.dis_thr)
-        self.FP = np.zeros_like(self.dis_thr)
-        self.FN = np.zeros_like(self.dis_thr)
-        self.Precision = np.zeros_like(self.dis_thr)
-        self.Recall = np.zeros_like(self.dis_thr)
-        self.F1 = np.zeros_like(self.dis_thr)
+        self.TP = np.zeros((len(self.dis_thr), len(self.conf_thr)))
+        self.FP = np.zeros((len(self.dis_thr), len(self.conf_thr)))
+        self.FN = np.zeros((len(self.dis_thr), len(self.conf_thr)))
+        self.Precision = np.zeros((len(self.dis_thr), len(self.conf_thr)))
+        self.Recall = np.zeros((len(self.dis_thr), len(self.conf_thr)))
+        self.F1 = np.zeros((len(self.dis_thr), len(self.conf_thr)))
+        self.time_cost = []
 
     @property
     def table(self):
-        all_metric = np.stack([
-            self.dis_thr, self.TP, self.FP, self.FN, self.Precision,
-            self.Recall, self.F1
-        ],
-                              axis=1)
+        all_metric = np.vstack([self.dis_thr, self.AP])
         df = pd.DataFrame(all_metric)
-        df.columns = ['dis_thr', 'TP', 'FP', 'FN', 'Precision', 'Recall', 'F1']
+        df.index = ['Dis-Thr', 'AP']
         return df
-
-    def _get_dilated(self, image: np.array):
-        """_summary_
-
-        Args:
-            image (np.array): hwc of np.array.
-        """
-
-        kernel = np.ones(self.dilate_kernel_size, np.uint8)
-        if kernel.sum() == 0:
-            return image
-
-        dilated_image = cv2.dilate(image, kernel, iterations=1)
-
-        return dilated_image
-
-    def _calculate_tp_fn_fp(self, coord_label: np.array, coord_pred: np.array,
-                            threshold: int):
-        """_summary_
-
-        Args:
-            gt_centroids (np.array): shape = (N,2)
-            pred_centroids (np.array): shape = (M,2)
-            threshold (int): threshold, Euclidean Distance.
-
-        Returns:
-            _type_: _description_
-        """
-        TP = 0
-        FN = 0
-        FP = 0
-
-        if self.match_alg == 'hungarian':
-            centroid_lbl = np.array([prop.centroid for prop in coord_label])
-            centroid_pre = np.array([prop.centroid for prop in coord_pred])
-            if centroid_lbl.shape[0] == 0:
-                centroid_lbl = np.empty((0, 2))
-            if centroid_pre.shape[0] == 0:
-                centroid_pre = np.empty((0, 2))
-            eul_distance = np.linalg.norm(
-                centroid_lbl[:, None, :] - centroid_pre[None, :, :],
-                axis=-1)  # N*M, N==coord_label.shape, M = coord_pred.shape
-            row_indexes, col_indexes = linear_sum_assignment(eul_distance)
-            selec_distance = eul_distance[row_indexes, col_indexes]
-            TP = np.sum(selec_distance < threshold)
-            FP = len(coord_pred) - TP
-            FN = len(coord_label) - TP
-
-        elif self.match_alg == 'ergodic':
-            for i in range(len(coord_label)):
-                # get one gt centroid
-                centroid_label = np.array(list(coord_label[i].centroid))
-                for m in range(len(coord_pred)):
-                    # get one pred centroid
-                    centroid_image = np.array(list(coord_pred[m].centroid))
-                    # calculate
-                    distance = np.linalg.norm(centroid_image - centroid_label)
-
-                    if distance < threshold:
-                        TP += 1
-                        del coord_pred[m]  # remove matched pred object
-                        break
-            FP = len(coord_pred)
-            FN = len(coord_label) - TP
-        else:
-            raise NotImplementedError(
-                f"{self.match_alg} is not implemented, please use 'hungarian' or 'ergodic' for match_alg."
-            )
-
-        return TP, FN, FP

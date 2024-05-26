@@ -159,3 +159,52 @@ def convert2gray(image: np.array) -> np.array:
     elif channels == 1:
         gray_image = np.squeeze(image, axis=-1)
     return gray_image
+
+
+def _adjust_conf_thr_arg(
+        thresholds: Union[int, List[float], np.ndarray]) -> np.ndarray:
+    """Convert threshold arg for list and int to np.array format.
+
+    Args:
+        thresholds (Union[int, List[float], np.ndarray]):
+            - If set to an `int` (larger than 1), will use that number of thresholds linearly spaced \
+                from 0 to 1 as bins for the calculation.
+            - If set to an `list` of floats, will use the indicated thresholds in the list as bins \
+                for the calculation
+            - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
+                bins for the calculation.
+
+    Returns:
+        np.ndarray: _description_
+    """
+    if isinstance(thresholds, int):
+        return np.linspace(0, 1, thresholds, endpoint=True)
+    if isinstance(thresholds, list):
+        return np.array(thresholds)
+    return thresholds
+
+
+def _adjust_dis_thr_arg(
+        thresholds: Union[int, float, List[float], np.ndarray]) -> np.ndarray:
+    """Convert threshold arg for list and int to np.array format.
+
+    Args:
+        thresholds (Union[int, float, List[float], np.ndarray]):
+            - If set to an `int` , will use this value to distance threshold.
+            - If set to an `list` of float or int, will use the indicated thresholds \
+                in the list as bins for the calculation
+            - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
+            bins for the calculation.
+            if List, closed interval.
+
+    Returns:
+        np.ndarray: _description_
+    """
+    if isinstance(thresholds, (int, float)):
+        return np.array([thresholds])
+    if isinstance(thresholds, list):
+        return np.linspace(*thresholds,
+                           int(np.round(
+                               (thresholds[1] - thresholds[0]) / 1)) + 1,
+                           endpoint=True)
+    return thresholds
