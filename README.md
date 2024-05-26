@@ -30,6 +30,7 @@ Only use
 ```bash
 pip install sosmetrics
 ```
+For more details, please refer to `./notebook/tutorial.ipynb`
 ## Features
 
 ## Tutorial

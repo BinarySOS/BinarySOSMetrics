@@ -320,8 +320,9 @@ class BinaryCenterMetric(BaseMetric):
             np.finfo(np.float64).eps)
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(dilate_kernel_size={self.dilate_kernel_size}, \
-            match_alg={self.match_alg}, iou_mode={self.iou_mode})'
+        return f'{self.__class__.__name__}' \
+                f'(dilate_kernel_size={self.dilate_kernel_size}', \
+                f'match_alg={self.match_alg}, iou_mode={self.iou_mode})'
 
 
 class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):

@@ -17,14 +17,16 @@ def time_cost_deco(func):
                 )
         else:
             start_time = time.time()
-            print(f'{self.__class__.__name__}.update() took \
-                    {sum(vars(self)["time_cost"])/len(vars(self)["time_cost"]):.2f}s each time.'
-                  )
+            print(
+                f'{self.__class__.__name__}.update() took '
+                f'{sum(vars(self)["time_cost"])/len(vars(self)["time_cost"]):.2f}s each time.'
+            )
             res = func(self, *args, **kwargs)
             if vars(self)['debug']:
-                print(f'{self.__class__.__name__}.update() and get() took \
-                        a total of {sum(vars(self)["time_cost"]) + time.time()-start_time:.2f}s.'
-                      )
+                print(
+                    f'{self.__class__.__name__}.update() and get() took a total of '
+                    f'{sum(vars(self)["time_cost"]) + time.time()-start_time:.2f}s.'
+                )
             if hasattr(self, '__repr__'):
                 print(self.__repr__())
         return res
