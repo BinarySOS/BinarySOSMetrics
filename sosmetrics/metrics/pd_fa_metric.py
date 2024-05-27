@@ -203,3 +203,6 @@ class PD_FAMetric(BaseMetric):
         NP = pred_img.shape[0] * pred_img.shape[1]
         AT = num_lbl
         return AT, TD, FD, NP
+
+    def __repr__(self) -> str:
+        return f'{self.__class__.__name__}(conf_thr={self.conf_thr})'

@@ -33,7 +33,7 @@ def _get_dilated(image: np.ndarray,
 
 
 def _get_label_coord_and_gray(
-        label: np.ndarray) -> List[RegionProperties, np.ndarray]:
+        label: np.ndarray) -> Tuple[RegionProperties, np.ndarray]:
     label = label > 0  # sometimes is 0-1, force to 255.
     label = label.astype('uint8')
     label = convert2gray(label).astype('int64')
@@ -42,11 +42,10 @@ def _get_label_coord_and_gray(
     return coord_label, label
 
 
-def _get_pred_coord_and_gray(
-    pred: np.ndarray,
-    conf_thr: float,
-    dilate_kernel_size: List[int] = [0,
-                                     0]) -> List[RegionProperties, np.ndarray]:
+def _get_pred_coord_and_gray(pred: np.ndarray,
+                             conf_thr: float,
+                             dilate_kernel_size: List[int] = [0, 0]
+                             ) -> Tuple[RegionProperties, np.ndarray]:
     cur_pred = pred >= conf_thr
     cur_pred = cur_pred.astype('uint8')
     # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
@@ -323,9 +322,10 @@ class BinaryCenterMetric(BaseMetric):
             np.finfo(np.float64).eps)
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}' \
-                f'(dilate_kernel_size={self.dilate_kernel_size}', \
-                f'match_alg={self.match_alg}, iou_mode={self.iou_mode})'
+        message = (f'{self.__class__.__name__}'
+                   f'(dilate_kernel_size={self.dilate_kernel_size}, '
+                   f'match_alg={self.match_alg}, iou_mode={self.iou_mode})')
+        return message
 
 
 class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
