@@ -71,7 +71,7 @@ class AUC_ROC_PRMetric(BaseMetric):
         self.ap = self.ap_fn.compute().numpy()
 
         if self.print_table:
-            head = ['AUC_ROC', 'AUC_PR', 'AP']
+            head = ['AUC_ROC', 'AUC_PR(AUC function)', 'AP(BinaryAveragePrecision function)']
             table = PrettyTable(head)
             table.add_row([self.auc_roc, self.auc_pr, self.ap])
             print(table)
