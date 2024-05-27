@@ -32,19 +32,21 @@ def _get_dilated(image: np.ndarray,
     return dilated_image
 
 
-def _get_label_coord(label: np.ndarray) -> List[RegionProperties]:
+def _get_label_coord_and_gray(
+        label: np.ndarray) -> List[RegionProperties, np.ndarray]:
     label = label > 0  # sometimes is 0-1, force to 255.
     label = label.astype('uint8')
     label = convert2gray(label).astype('int64')
     label = measure.label(label, connectivity=2)
     coord_label = measure.regionprops(label)
-    return coord_label
+    return coord_label, label
 
 
-def _get_pred_coord(
-        pred: np.ndarray,
-        conf_thr: float,
-        dilate_kernel_size: List[int] = [0, 0]) -> List[RegionProperties]:
+def _get_pred_coord_and_gray(
+    pred: np.ndarray,
+    conf_thr: float,
+    dilate_kernel_size: List[int] = [0,
+                                     0]) -> List[RegionProperties, np.ndarray]:
     cur_pred = pred >= conf_thr
     cur_pred = cur_pred.astype('uint8')
     # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
@@ -55,7 +57,7 @@ def _get_pred_coord(
 
     pred_img = measure.label(dilated_pred, connectivity=2)
     coord_pred = measure.regionprops(pred_img)
-    return coord_pred
+    return coord_pred, cur_pred
 
 
 class BinaryCenterMetric(BaseMetric):
@@ -119,10 +121,11 @@ class BinaryCenterMetric(BaseMetric):
         """
 
         def evaluate_worker(label, pred):
-            coord_label = _get_label_coord(label)
-            coord_pred = _get_pred_coord(pred.copy(), self.conf_thr,
-                                         self.dilate_kernel_size)
-            distances = self._calculate_infos(coord_label, coord_pred, pred)
+            coord_label, gray_label = _get_label_coord_and_gray(label)
+            coord_pred, gray_pred = _get_pred_coord_and_gray(
+                pred.copy(), self.conf_thr, self.dilate_kernel_size)
+            distances = self._calculate_infos(coord_label, coord_pred,
+                                              gray_pred)
             for idx, threshold in enumerate(self.dis_thr):
                 TP, FN, FP = self._calculate_tp_fn_fp(distances.copy(),
                                                       threshold)
@@ -244,6 +247,7 @@ class BinaryCenterMetric(BaseMetric):
         for i in range(num_pred):
             pred_mask[i, pixel_coords_pred[i][:, 0],
                       pixel_coords_pred[i][:, 1]] = 1
+
         mask_iou = target_mask_iou(gt_mask, pred_mask)  # num_lbl * num_pred
 
         if self.debug:
@@ -384,13 +388,13 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         """
 
         def evaluate_worker(label, pred):
-            coord_label = _get_label_coord(label)
+            coord_label, gray_label = _get_label_coord_and_gray(label)
 
             for idx, conf_thr in enumerate(self.conf_thr):
-                coord_pred = _get_pred_coord(pred.copy(), conf_thr,
-                                             self.dilate_kernel_size)
+                coord_pred, gray_pred = _get_pred_coord_and_gray(
+                    pred.copy(), conf_thr, self.dilate_kernel_size)
                 distances = self._calculate_infos(coord_label, coord_pred,
-                                                  pred)
+                                                  gray_pred)
                 for jdx, threshold in enumerate(self.dis_thr):
                     TP, FN, FP = self._calculate_tp_fn_fp(
                         distances.copy(), threshold)
