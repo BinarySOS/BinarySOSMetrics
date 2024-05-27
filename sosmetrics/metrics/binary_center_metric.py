@@ -244,7 +244,8 @@ class BinaryCenterMetric(BaseMetric):
         for i in range(num_pred):
             pred_mask[i, pixel_coords_pred[i][:, 0],
                       pixel_coords_pred[i][:, 1]] = 1
-        mask_iou = target_mask_iou(gt_mask, pred_mask)  # num_lbl * num_pred
+
+        mask_iou = target_mask_iou(gt_mask, pred_mask).squeeze(-1)  # num_lbl * num_pred
 
         if self.debug:
             print(f'centroid_lbl={centroid_lbl}')
