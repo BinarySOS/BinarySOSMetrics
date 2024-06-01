@@ -9,7 +9,8 @@ from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric, time_cost_deco
-from .utils import _TYPES, _adjust_dis_thr_arg, convert2gray, convert2iterable
+from .utils import (_TYPES, _adjust_dis_thr_arg, _safe_divide, convert2gray,
+                    convert2iterable)
 
 
 class PD_FAMetric(BaseMetric):
@@ -100,8 +101,9 @@ class PD_FAMetric(BaseMetric):
 
     @time_cost_deco
     def get(self):
-        self.FA = self.FD / self.NP
-        self.PD = self.TD / self.AT
+
+        self.FA = _safe_divide(self.FD, self.NP)
+        self.PD = _safe_divide(self.TD, self.AT)
 
         if self.print_table:
             head = ['Threshold']

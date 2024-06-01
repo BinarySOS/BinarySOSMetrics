@@ -208,3 +208,34 @@ def _adjust_dis_thr_arg(
                                (thresholds[1] - thresholds[0]) / 1)) + 1,
                            endpoint=True)
     return thresholds
+
+
+def _safe_divide(
+        num: Union[torch.Tensor, np.ndarray],
+        denom: Union[torch.Tensor, np.ndarray],
+        zero_division: float = 0.0) -> Union[torch.Tensor, np.ndarray]:
+    """Safe division, by preventing division by zero.
+
+    Args:
+        num (Union[Tensor, np.ndarray]): _description_
+        denom (Union[Tensor, np.ndarray]): _description_
+        zero_division (float, optional): _description_. Defaults to 0.0.
+
+    Returns:
+        Union[Tensor, np.ndarray]: _description_
+    """
+    if isinstance(num, np.ndarray):
+        num = num if np.issubdtype(num.dtype,
+                                   np.floating) else num.astype(float)
+        denom = denom if np.issubdtype(denom.dtype,
+                                       np.floating) else denom.astype(float)
+        results = np.divide(
+            num,
+            denom,
+            where=(denom != np.array([zero_division]).astype(float)))
+    else:
+        num = num if num.is_floating_point() else num.float()
+        denom = denom if denom.is_floating_point() else denom.float()
+        zero_division = torch.tensor(zero_division).float()
+        results = torch.where(denom != 0, num / denom, zero_division)
+    return results

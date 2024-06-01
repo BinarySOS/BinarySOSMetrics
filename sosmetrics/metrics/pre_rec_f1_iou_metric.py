@@ -7,7 +7,7 @@ from prettytable import PrettyTable
 from sklearn.metrics import confusion_matrix
 
 from .base import BaseMetric, time_cost_deco
-from .utils import _TYPES, convert2iterable
+from .utils import _TYPES, _safe_divide, convert2iterable
 
 
 class Precision_Recall_F1_IoUMetric(BaseMetric):
@@ -54,11 +54,11 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
 
     @time_cost_deco
     def get(self):
-        self.recall = self.tp / (self.tp + self.fn + 1e-10)
-        self.precision = self.tp / (self.tp + self.fp + 1e-10)
-        self.iou = self.tp / (self.tp + self.fp + self.fn + 1e-10)
-        self.f1_score = 2 * self.precision * self.recall / (
-            self.precision + self.recall + 1e-10)
+        self.recall = _safe_divide(self.tp, self.tp + self.fn)
+        self.precision = _safe_divide(self.tp, self.tp + self.fp)
+        self.iou = _safe_divide(self.tp, self.tp + self.fp + self.fn)
+        self.f1_score = _safe_divide(2 * self.precision * self.recall,
+                                     self.precision + self.recall)
         if self.print_table:
             head = [
                 f'Precision-{self.conf_thr}', f'Recall-{self.conf_thr}',

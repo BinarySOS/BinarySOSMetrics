@@ -12,8 +12,8 @@ from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric, time_cost_deco
 from .utils import (_TYPES, _adjust_conf_thr_arg, _adjust_dis_thr_arg,
-                    bbox_overlaps, convert2gray, convert2iterable,
-                    target_mask_iou)
+                    _safe_divide, bbox_overlaps, convert2gray,
+                    convert2iterable, target_mask_iou)
 
 
 def _get_dilated(image: np.ndarray,
@@ -313,13 +313,12 @@ class BinaryCenterMetric(BaseMetric):
         return TP, FN, FP
 
     def _calculate_precision_recall_f1(self):
-        self.Precision = self.TP / np.maximum(self.TP + self.FP,
-                                              np.finfo(np.float64).eps)
-        self.Recall = self.TP / (self.TP + self.FN)
+
+        self.Precision = _safe_divide(self.TP, self.TP + self.FP)
+        self.Recall = _safe_divide(self.TP, self.TP + self.FN)
         # micro F1 socre.
-        self.F1 = 2 * self.Precision * self.Recall / np.maximum(
-            self.Precision + self.Recall,
-            np.finfo(np.float64).eps)
+        self.F1 = _safe_divide(2 * self.Precision * self.Recall,
+                               self.Precision + self.Recall)
 
     def __repr__(self) -> str:
         message = (f'{self.__class__.__name__}'
