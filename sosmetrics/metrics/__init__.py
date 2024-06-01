@@ -1,5 +1,5 @@
 from .auc_roc_pr_metric import AUC_ROC_PRMetric
-from .base import BaseMetric
+from .base import BaseMetric, time_cost_deco
 from .binary_center_metric import (BinaryCenterAveragePrecisionMetric,
                                    BinaryCenterMetric)
 from .pd_fa_metric import PD_FAMetric

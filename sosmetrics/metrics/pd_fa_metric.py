@@ -4,6 +4,7 @@ from typing import Any, List, Tuple, Union
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
+from scipy.optimize import linear_sum_assignment
 from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
@@ -16,6 +17,7 @@ class PD_FAMetric(BaseMetric):
     def __init__(self,
                  conf_thr: float = 0.5,
                  dis_thr: Union[List[int], int] = [1, 10],
+                 match_alg: str = 'forloop',
                  **kwargs: Any):
         """Modified from https://github.com/XinyiYing/BasicIRSTD/blob/main/metrics.py
         We added multi-threading as well as batch processing.
@@ -37,12 +39,15 @@ class PD_FAMetric(BaseMetric):
             conf_thr (float, Optional): Confidence threshold. Defaults to 0.5.
             dis_thr (Union[List[int], int], optional): dis_thr of Euclidean distance,
                 if List, closed interval. . Defaults to [1,10].
+            match_alg (str, optional): 'hungarian' or 'forloop' to match pred and gt,
+                'forloop'is the original implementation of PD_FA,
+                based on the first-match principle. Defaults to 'forloop'
+                But, usually, hungarian is fast and accurate.
         """
         super().__init__(**kwargs)
         self.dis_thr = _adjust_dis_thr_arg(dis_thr)
-
         self.conf_thr = conf_thr
-
+        self.match_alg = match_alg
         self.lock = threading.Lock()
         self.reset()
 
@@ -170,9 +175,9 @@ class PD_FAMetric(BaseMetric):
 
         return eul_distance
 
-    def _calculate_at_td_fd_np(
-            self, distances: np.array, coord_pred: List[RegionProperties],
-            threshold: int, pred_img: np.array) -> Tuple[int, int, int, int]:
+    def _calculate_at_td_fd_np(self, distances: np.ndarray,
+                               coord_pred: List[RegionProperties],
+                               threshold: int, pred_img: np.ndarray) -> Tuple:
         """_summary_
 
         Args:
@@ -186,18 +191,35 @@ class PD_FAMetric(BaseMetric):
         """
         num_lbl, num_pred = distances.shape
         true_img = np.zeros(pred_img.shape)
+
         if num_lbl * num_pred == 0:
             # no lbl or no pred
             TD = 0
-        else:
+        elif self.match_alg == 'hungarian':
+            row_indexes, col_indexes = linear_sum_assignment(distances)
+            selec_distance = distances[row_indexes, col_indexes]
+            matched = selec_distance < threshold
+            TD = np.sum(matched)
+            for j in col_indexes[
+                    matched]:  # col_indexes present matched pred index.
+                true_img[coord_pred[j].coords[:, 0],
+                         coord_pred[j].coords[:, 1]] = 1
+
+        elif self.match_alg == 'forloop':
             for i in range(num_lbl):
                 for j in range(num_pred):
                     if distances[i, j] < threshold:
-                        distances[:, j] = np.inf  # Set inf to mark matched
+                        distances[:,
+                                  j] = np.inf  # Set inf to mark matched preds.
                         true_img[coord_pred[j].coords[:, 0],
                                  coord_pred[j].coords[:, 1]] = 1
                         break
+            # get number of inf columns, is equal to TD
             TD = distances[distances == np.inf].size // num_lbl
+
+        else:
+            raise NotImplementedError(
+                f'match_alg={self.match_alg} is not implemented.')
 
         FD = (pred_img - true_img).sum()
         NP = pred_img.shape[0] * pred_img.shape[1]
@@ -205,4 +227,5 @@ class PD_FAMetric(BaseMetric):
         return AT, TD, FD, NP
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(conf_thr={self.conf_thr})'
+        return (f'{self.__class__.__name__}(conf_thr={self.conf_thr}, '
+                f'match_alg={self.match_alg})')
