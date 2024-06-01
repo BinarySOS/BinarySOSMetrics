@@ -9,8 +9,8 @@ from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric, time_cost_deco
-from .utils import (_TYPES, _adjust_dis_thr_arg, _safe_divide, convert2gray,
-                    convert2iterable)
+from .utils import (_TYPES, _adjust_dis_thr_arg, _safe_divide,
+                    calculate_target_infos, convert2format, convert2gray)
 
 
 class PD_FAMetric(BaseMetric):
@@ -19,15 +19,39 @@ class PD_FAMetric(BaseMetric):
                  conf_thr: float = 0.5,
                  dis_thr: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
+                 second_match: str = 'none',
                  **kwargs: Any):
-        """Modified from https://github.com/XinyiYing/BasicIRSTD/blob/main/metrics.py
-        We added multi-threading as well as batch processing.
+        """
+        Original Code: https://github.com/XinyiYing/BasicIRSTD/blob/main/metrics.py
 
-        1. get connectivity region of gt and pred
-        2. ergodic connectivity region of gt, compute the distance between every connectivity region of pred,
-            if distance < threshold, then match.
-            and delete the connectivity region of pred,
-            and set to 1 for compute number of pixel.
+        Paper:
+            @ARTICLE{9864119,
+            author={Li, Boyang and Xiao, Chao and Wang, Longguang and Wang, Yingqian and Lin, \
+                Zaiping and Li, Miao and An, Wei and Guo, Yulan},
+            journal={IEEE Transactions on Image Processing},
+            title={Dense Nested Attention Network for Infrared Small Target Detection},
+            year={2023},
+            volume={32},
+            number={},
+            pages={1745-1758},
+            keywords={Feature extraction;Object detection;Shape;Clutter;Decoding;Annotations;\
+                Training;Infrared small target detection;deep learning;dense nested interactive module;\
+                    channel and spatial attention;dataset},
+            doi={10.1109/TIP.2022.3199107}}
+
+        We have made the following improvements
+            1. Supports multi-threading as well as batch processing.
+            2. Supports the Hungarian algorithm to match gt and pred, which is faster and more accurate.
+            3. Supports secondary matching using mask iou.
+
+        Original setting: conf_thr=0.5, dis_thr=3, match_alg='forloop', second_match='none'
+
+        Pipeline:
+            1. get connectivity region of gt and pred
+            2. ergodic connectivity region of gt, compute the distance between every connectivity region of pred,
+                if distance < threshold, then match.
+                and delete the connectivity region of pred,
+                and set to 1 for compute number of pixel.
 
         TD: Number of correctly predicted targets, GT is positive and Pred is positive, like TP.
         AT: All Targets, Number of target in GT, like TP + FN.
@@ -44,11 +68,14 @@ class PD_FAMetric(BaseMetric):
                 'forloop'is the original implementation of PD_FA,
                 based on the first-match principle. Defaults to 'forloop'
                 But, usually, hungarian is fast and accurate.
+            second_math (str, optional): 'none' or 'mask_iou' to match pred and gt after distance matching. \
+                Defaults to 'none'.
         """
         super().__init__(**kwargs)
         self.dis_thr = _adjust_dis_thr_arg(dis_thr)
         self.conf_thr = conf_thr
         self.match_alg = match_alg
+        self.second_match = second_match
         self.lock = threading.Lock()
         self.reset()
 
@@ -57,8 +84,6 @@ class PD_FAMetric(BaseMetric):
 
         def evaluate_worker(self, label: np.array, pred: np.array) -> None:
             # to unit8 for ``convert2gray()``
-            label = label > 0  # sometimes is 0-1, force to 255.
-            label = label.astype('uint8')
             pred = pred > self.conf_thr
             pred = pred.astype('uint8')
 
@@ -72,7 +97,26 @@ class PD_FAMetric(BaseMetric):
 
             image = measure.label(gray_label, connectivity=2)
             coord_label = measure.regionprops(image)
-            distances = self._calculate_infos(coord_label, coord_pred)
+            distances, mask_iou, _ = calculate_target_infos(
+                coord_label, coord_pred, gray_pred.shape[0],
+                gray_pred.shape[1])
+
+            if self.debug:
+                print(f'mask_iou={mask_iou}')
+                print(f'eul_distance={distances}')
+                print('____' * 20)
+
+            if self.second_match == 'mask_iou':
+                mask_iou[mask_iou == 0.] = np.inf
+                mask_iou[mask_iou != np.inf] = 0.
+                distances = distances + mask_iou
+
+                if self.debug:
+                    print(f'after second match mask iou={mask_iou}')
+                    print(
+                        f'after second matche eul distance={distances + mask_iou}'
+                    )
+                    print('____' * 20)
 
             for idx, threshold in enumerate(self.dis_thr):
                 AT, TD, FD, NP = self._calculate_at_td_fd_np(
@@ -84,7 +128,7 @@ class PD_FAMetric(BaseMetric):
                     self.TD[idx] += TD
 
         # Packaged in the format we need, bhwc of np.array or hwc of list.
-        labels, preds = convert2iterable(labels, preds)
+        labels, preds = convert2format(labels, preds)
 
         # for i in range(len(labels)):
         #     evaluate_worker(labels[i].squeeze(0), preds[i].squeeze(0))
@@ -141,42 +185,6 @@ class PD_FAMetric(BaseMetric):
         ]
         return df_pd_fa
 
-    def _calculate_infos(self, coord_label: List[RegionProperties],
-                         coord_pred: List[RegionProperties]) -> np.array:
-        """calculate distances between label and pred. single image.
-
-        Args:
-            coord_label (List[RegionProperties]): measure.regionprops(label)
-            coord_pred (List[RegionProperties]): measure.regionprops(pred)
-            img (np.array): _description_
-
-        Raises:
-            NotImplementedError: _description_
-            NotImplementedError: _description_
-
-        Returns:
-            np.array: distances between label and pred. (num_lbl * num_pred)
-        """
-
-        num_lbl = len(coord_label)  # number of label
-        num_pred = len(coord_pred)  # number of pred
-
-        if num_lbl * num_pred == 0:
-            return np.empty(
-                (num_lbl,
-                 num_pred))  # gt=0 or pred=0, (num_lbl, 0) or (0, num_pred)
-
-        # eul distance
-        centroid_lbl = np.array([prop.centroid for prop in coord_label
-                                 ]).astype(np.float32)  # N*2
-        centroid_pred = np.array([prop.centroid for prop in coord_pred
-                                  ]).astype(np.float32)  # M*2
-        eul_distance = np.linalg.norm(centroid_lbl[:, None, :] -
-                                      centroid_pred[None, :, :],
-                                      axis=-1)  # num_lbl * num_pred
-
-        return eul_distance
-
     def _calculate_at_td_fd_np(self, distances: np.ndarray,
                                coord_pred: List[RegionProperties],
                                threshold: int, pred_img: np.ndarray) -> Tuple:
@@ -197,6 +205,7 @@ class PD_FAMetric(BaseMetric):
         if num_lbl * num_pred == 0:
             # no lbl or no pred
             TD = 0
+
         elif self.match_alg == 'hungarian':
             row_indexes, col_indexes = linear_sum_assignment(distances)
             selec_distance = distances[row_indexes, col_indexes]

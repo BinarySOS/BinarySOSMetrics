@@ -7,12 +7,12 @@ from prettytable import PrettyTable
 from sklearn.metrics import confusion_matrix
 
 from .base import BaseMetric, time_cost_deco
-from .utils import _TYPES, _safe_divide, convert2iterable
+from .utils import _TYPES, _safe_divide, convert2format
 
 
 class Precision_Recall_F1_IoUMetric(BaseMetric):
 
-    def __init__(self, conf_thr: float, debug: bool = False, **kwargs: Any):
+    def __init__(self, conf_thr: float, **kwargs: Any):
         """length of true positive rates(tpr), false positive(fpr) are bins+1.
 
         Args:
@@ -34,7 +34,7 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
                 self.fn[0] += fn
                 self.tn[0] += tn
 
-        labels, preds = convert2iterable(labels, preds)
+        labels, preds = convert2format(labels, preds)
         if isinstance(labels, np.ndarray):
             evaluate_worker(self, labels, preds)
 
@@ -66,9 +66,9 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
             ]
             table = PrettyTable(head)
             table.add_row([
-                '{:.5f}'.format(self.precision[0]),
-                '{:.5f}'.format(self.recall[0]),
-                '{:.5f}'.format(self.f1_score[0]), '{:.5f}'.format(self.iou[0])
+                '{:.4f}'.format(self.precision[0]),
+                '{:.4f}'.format(self.recall[0]),
+                '{:.4f}'.format(self.f1_score[0]), '{:.5f}'.format(self.iou[0])
             ])
             print(table)
 

@@ -10,7 +10,7 @@ from torchmetrics.classification import (BinaryAveragePrecision,
                                          BinaryPrecisionRecallCurve, BinaryROC)
 
 from .base import BaseMetric, time_cost_deco
-from .utils import _TYPES, convert2iterable
+from .utils import _TYPES, convert2format
 
 
 # codespell:ignore fpr
@@ -43,7 +43,7 @@ class AUC_ROC_PRMetric(BaseMetric):
             self.pr_curve_fn.update(ten_pred, ten_gt)
             self.ap_fn.update(ten_pred, ten_gt)
 
-        labels, preds = convert2iterable(labels, preds)
+        labels, preds = convert2format(labels, preds)
 
         if isinstance(labels, np.ndarray):
             evaluate_worker(self, labels, preds)
@@ -71,7 +71,10 @@ class AUC_ROC_PRMetric(BaseMetric):
         self.ap = self.ap_fn.compute().numpy()
 
         if self.print_table:
-            head = ['AUC_ROC', 'AUC_PR(AUC function)', 'AP(BinaryAveragePrecision function)']
+            head = [
+                'AUC_ROC', 'AUC_PR(AUC function)',
+                'AP(BinaryAveragePrecision function)'
+            ]
             table = PrettyTable(head)
             table.add_row([self.auc_roc, self.auc_pr, self.ap])
             print(table)

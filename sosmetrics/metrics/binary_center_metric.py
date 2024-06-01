@@ -4,7 +4,6 @@ from typing import Any, List, Tuple, Union
 import cv2
 import numpy as np
 import pandas as pd
-import torch
 from prettytable import PrettyTable
 from scipy.optimize import linear_sum_assignment
 from skimage import measure
@@ -12,8 +11,8 @@ from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric, time_cost_deco
 from .utils import (_TYPES, _adjust_conf_thr_arg, _adjust_dis_thr_arg,
-                    _safe_divide, bbox_overlaps, convert2gray,
-                    convert2iterable, target_mask_iou)
+                    _safe_divide, calculate_target_infos, convert2format,
+                    convert2gray)
 
 
 def _get_dilated(image: np.ndarray,
@@ -123,8 +122,15 @@ class BinaryCenterMetric(BaseMetric):
             coord_label, gray_label = _get_label_coord_and_gray(label)
             coord_pred, gray_pred = _get_pred_coord_and_gray(
                 pred.copy(), self.conf_thr, self.dilate_kernel_size)
-            distances = self._calculate_infos(coord_label, coord_pred,
-                                              gray_pred)
+            distances, mask_iou, bbox_iou = calculate_target_infos(
+                coord_label, coord_pred, gray_pred.shape[0],
+                gray_pred.shape[1])
+            if self.debug:
+                print(f'bbox_iou={bbox_iou}')
+                print(f'mask_iou={mask_iou}')
+                print(f'eul_distance={distances}')
+                print('____' * 20)
+
             for idx, threshold in enumerate(self.dis_thr):
                 TP, FN, FP = self._calculate_tp_fn_fp(distances.copy(),
                                                       threshold)
@@ -134,18 +140,20 @@ class BinaryCenterMetric(BaseMetric):
                     self.FN[idx] += FN
             return
 
-        labels, preds = convert2iterable(labels, preds)
+        labels, preds = convert2format(labels, preds)
 
-        for i in range(len(labels)):
-            evaluate_worker(labels[i], preds[i])
-        # threads = [threading.Thread(target=evaluate_worker,
-        #                             args=(self, labels[i], preds[i]),
-        #                             )
-        #            for i in range(len(labels))]
-        # for thread in threads:
-        #     thread.start()
-        # for thread in threads:
-        #     thread.join()
+        # for i in range(len(labels)):
+        #     evaluate_worker(labels[i], preds[i])
+        threads = [
+            threading.Thread(
+                target=evaluate_worker,
+                args=(self, labels[i], preds[i]),
+            ) for i in range(len(labels))
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
     @time_cost_deco
     def get(self):
@@ -191,84 +199,19 @@ class BinaryCenterMetric(BaseMetric):
         df.columns = ['dis_thr', 'TP', 'FP', 'FN', 'Precision', 'Recall', 'F1']
         return df
 
-    def _calculate_infos(self, coord_label: List[RegionProperties],
-                         coord_pred: List[RegionProperties],
-                         img: np.ndarray) -> np.ndarray:
-        """calculate distances between label and pred. single image.
+        # if self.iou_mode == 'mask_iou':
+        #     reciprocal = np.reciprocal(mask_iou, where=mask_iou != 0)
+        #     return eul_distance + reciprocal
+        # elif self.iou_mode == 'bbox_iou':
+        #     reciprocal = np.reciprocal(bbox_iou, where=bbox_iou != 0)
+        #     return eul_distance + reciprocal
+        # elif self.iou_mode == 'none':
+        #     return eul_distance
 
-        Args:
-            coord_label (List[RegionProperties]): measure.regionprops(label)
-            coord_pred (List[RegionProperties]): measure.regionprops(pred)
-            img (np.ndarray): _description_
-
-        Raises:
-            NotImplementedError: _description_
-            NotImplementedError: _description_
-
-        Returns:
-            np.ndarray: distances between label and pred. (num_lbl * num_pred)
-        """
-
-        num_lbl = len(coord_label)  # number of label
-        num_pred = len(coord_pred)  # number of pred
-
-        if num_lbl * num_pred == 0:
-            return np.empty(
-                (num_lbl,
-                 num_pred))  # gt=0 or pred=0, (num_lbl, 0) or (0, num_pred)
-
-        # eul distance
-        centroid_lbl = np.array([prop.centroid for prop in coord_label
-                                 ]).astype(np.float32)  # N*2
-        centroid_pred = np.array([prop.centroid for prop in coord_pred
-                                  ]).astype(np.float32)  # M*2
-        eul_distance = np.linalg.norm(centroid_lbl[:, None, :] -
-                                      centroid_pred[None, :, :],
-                                      axis=-1)  # num_lbl * num_pred
-
-        # bbox iou
-        bbox_lbl = torch.tensor([prop.bbox for prop in coord_label],
-                                dtype=torch.float32)  # N*4
-        bbox_pred = torch.tensor([prop.bbox for prop in coord_pred],
-                                 dtype=torch.float32)  # M*4
-        bbox_iou = bbox_overlaps(
-            bbox_lbl, bbox_pred, mode='iou',
-            is_aligned=False).numpy()  # num_lbl * num_pred
-
-        # mask iou
-        pixel_coords_lbl = [prop.coords for prop in coord_label]
-        pixel_coords_pred = [prop.coords for prop in coord_pred]
-        gt_mask = np.zeros((num_lbl, *img.shape))  # [num_lbl, H, W]
-        pred_mask = np.zeros((num_pred, *img.shape))  # [num_pred, H, W]
-        for i in range(num_lbl):
-            gt_mask[i, pixel_coords_lbl[i][:, 0], pixel_coords_lbl[i][:,
-                                                                      1]] = 1
-        for i in range(num_pred):
-            pred_mask[i, pixel_coords_pred[i][:, 0],
-                      pixel_coords_pred[i][:, 1]] = 1
-        mask_iou = target_mask_iou(gt_mask, pred_mask)  # num_lbl * num_pred
-
-        if self.debug:
-            print(f'centroid_lbl={centroid_lbl}')
-            print(f'centroid_pred={centroid_pred}')
-            print(f'bbox_iou={bbox_iou}')
-            print(f'mask_iou={mask_iou}')
-            print(f'eul_distance={eul_distance}')
-            print('____' * 20)
-
-        if self.iou_mode == 'mask_iou':
-            reciprocal = np.reciprocal(mask_iou, where=mask_iou != 0)
-            return eul_distance + reciprocal
-        elif self.iou_mode == 'bbox_iou':
-            reciprocal = np.reciprocal(bbox_iou, where=bbox_iou != 0)
-            return eul_distance + reciprocal
-        elif self.iou_mode == 'none':
-            return eul_distance
-
-        else:
-            raise NotImplementedError(
-                f"{self.iou_mode} is not implemented, please use 'none', 'bbox_iou', 'mask_iou' for distances."
-            )
+        # else:
+        #     raise NotImplementedError(
+        #         f"{self.iou_mode} is not implemented, please use 'none', 'bbox_iou', 'mask_iou' for distances."
+        #     )
 
     def _calculate_tp_fn_fp(self, distances: np.ndarray,
                             threshold: int) -> Tuple[int]:
@@ -391,8 +334,9 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
             for idx, conf_thr in enumerate(self.conf_thr):
                 coord_pred, gray_pred = _get_pred_coord_and_gray(
                     pred.copy(), conf_thr, self.dilate_kernel_size)
-                distances = self._calculate_infos(coord_label, coord_pred,
-                                                  gray_pred)
+                distances, _, _ = calculate_target_infos(
+                    coord_label, coord_pred, gray_pred.shape[0],
+                    gray_pred.shape[1])
                 for jdx, threshold in enumerate(self.dis_thr):
                     TP, FN, FP = self._calculate_tp_fn_fp(
                         distances.copy(), threshold)
@@ -402,7 +346,7 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
                         self.FN[jdx, idx] += FN
             return
 
-        labels, preds = convert2iterable(labels, preds)
+        labels, preds = convert2format(labels, preds)
 
         for i in range(len(labels)):
             evaluate_worker(labels[i], preds[i])
@@ -431,15 +375,15 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
             [self.Recall, np.zeros((len(self.Recall), 1))], axis=1)
         self.AP = -np.sum(
             (recall[:, 1:] - recall[:, :-1]) * precision[:, :-1], axis=1)
-
-        table = PrettyTable()
-        head = ['Dis—Thr']
-        head.extend(self.dis_thr.tolist())
-        table.field_names = head
-        ap_row = ['AP']
-        ap_row.extend(['{:.5f}'.format(num) for num in self.AP])
-        table.add_row(ap_row)
-        print(table)
+        if self.print_table:
+            table = PrettyTable()
+            head = ['Dis—Thr']
+            head.extend(self.dis_thr.tolist())
+            table.field_names = head
+            ap_row = ['AP']
+            ap_row.extend(['{:.4f}'.format(num) for num in self.AP])
+            table.add_row(ap_row)
+            print(table)
 
         return self.Precision, self.Recall, self.F1, self.AP
 
