@@ -37,7 +37,7 @@ class AUC_ROC_PRMetric(BaseMetric):
     def update(self, labels: _TYPES, preds: _TYPES) -> None:
 
         def evaluate_worker(self, label: np.array, pred: np.array):
-            ten_pred = torch.from_numpy(pred)
+            ten_pred = torch.from_numpy(pred).to(torch.float32)
             ten_gt = torch.from_numpy(label).to(torch.int64)
             self.roc_curve_fn.update(ten_pred, ten_gt)
             self.pr_curve_fn.update(ten_pred, ten_gt)

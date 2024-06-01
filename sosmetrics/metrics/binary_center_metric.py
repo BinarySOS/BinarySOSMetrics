@@ -118,7 +118,7 @@ class BinaryCenterMetric(BaseMetric):
             preds (_TYPES): Preds images or image paths in list or single.
         """
 
-        def evaluate_worker(label, pred):
+        def evaluate_worker(self, label, pred):
             coord_label, gray_label = _get_label_coord_and_gray(label)
             coord_pred, gray_pred = _get_pred_coord_and_gray(
                 pred.copy(), self.conf_thr, self.dilate_kernel_size)
