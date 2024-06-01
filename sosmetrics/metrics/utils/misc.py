@@ -63,10 +63,17 @@ def convert2batch(labels: np.array,
     return labels, preds
 
 
-def convert2iterable(labels: _TYPES,
-                     preds: _TYPES) -> Tuple[Iterable, Iterable]:
-    """Convert labels and preds to Iterable, bhwc or [hwc, ...] and scale preds to 0-1.
-        Preds must be probability image in 0-1.
+def is_batchable(data: List[np.ndarray]) -> bool:
+    try:
+        data = np.stack(data, axis=0)
+        return True
+    except TypeError:
+        return False
+
+
+def convert2format(labels: _TYPES, preds: _TYPES) -> Tuple[Iterable, Iterable]:
+    """Convert labels and preds to Iterable , bhwc or [hwc, ...] and scale preds, label to 0-1.
+        preds will be convert to probability image in 0-1.
         If path, we will grayscale it and /255 to 0-1.
 
     Args:
@@ -76,7 +83,7 @@ def convert2iterable(labels: _TYPES,
         ValueError: _description_
 
     Returns:
-        Tuple[Iterable, Iterable]: _description_
+        Tuple[Iterable, Iterable]:  labels, preds in Iterable format.
     """
     if isinstance(labels, (np.ndarray, torch.Tensor)):
         if isinstance(labels, torch.Tensor):
@@ -88,40 +95,44 @@ def convert2iterable(labels: _TYPES,
         #  hwc -> bhwc
         labels, preds = convert2batch(labels, preds)
 
-        if np.any((preds < 255) & (preds > 1)):
+        if np.any((preds <= 255) & (preds > 1)):
             # convert to 0-1, if preds is not probability image.
             preds = preds / 255.0
-        return labels, preds
 
-    if isinstance(labels, str):
+        labels = (labels > 0).astype('uint8')
+
+    elif isinstance(labels, str):
         # hwc in np.uint8, -> [hwc]
         labels = cv2.imread(labels, cv2.IMREAD_GRAYSCALE)[..., None] / 255
 
         # bwc in np.uint8, -> probability image from 0-1.
-        preds = cv2.imread(preds, cv2.IMREAD_GRAYSCALE)[..., None] / 255
-        return [labels], [preds]
+        preds = cv2.imread(preds, cv2.IMREAD_GRAYSCALE)[..., None] / 255.
+        labels = [labels]
+        preds = [preds]
 
-    if isinstance(labels, list) and isinstance(labels[0], str):
+    elif isinstance(labels, list) and isinstance(labels[0], str):
         labels = [
-            cv2.imread(label, cv2.IMREAD_GRAYSCALE)[..., None]
+            cv2.imread(label, cv2.IMREAD_GRAYSCALE)[..., None] / 255
             for label in labels
         ]
         preds = [
             cv2.imread(pred, cv2.IMREAD_GRAYSCALE)[..., None] / 255.
             for pred in preds
         ]
-        return labels, preds
 
-    if isinstance(labels, list) and isinstance(labels[0],
-                                               (np.ndarray, torch.Tensor)):
-        labels = [
-            label.detach().cpu().numpy()
-            if isinstance(label, torch.Tensor) else label for label in labels
-        ]
-        # preds = [
-        #     pred.detach().cpu().numpy()
-        #     if isinstance(pred, torch.Tensor) else pred for pred in preds
+    elif isinstance(labels, list) and isinstance(labels[0],
+                                                 (np.ndarray, torch.Tensor)):
+        # labels = [
+        #     label.detach().cpu().numpy()
+        #     if isinstance(label, torch.Tensor) else label for label in labels
         # ]
+        new_labels = []
+        for label in labels:
+            if isinstance(label, torch.Tensor):
+                label = label.detach().cpu().numpy()
+            label = (label > 0).astype('uint8')
+            new_labels.append(label)
+        labels = new_labels
 
         new_preds = []
         for pred in preds:
@@ -137,15 +148,20 @@ def convert2iterable(labels: _TYPES,
         ]
         labels = [_tmp[0] for _tmp in tmp]
         preds = [_tmp[1] for _tmp in tmp]
-        return labels, preds
 
-    raise ValueError(
-        f'labels should be np.array, torch.tensor, str or list of str, but got {type(labels)}'
-    )
+    else:
+        raise ValueError(
+            f'labels should be np.array, torch.tensor, str or list of str, but got {type(labels)}'
+        )
+    if isinstance(labels, list) and is_batchable(labels):
+        labels = np.stack(labels, axis=0)
+        preds = np.stack(preds, axis=0)
+    return labels, preds
 
 
-def convert2gray(image: np.array) -> np.array:
-    """ Image hwc to  hw
+def convert2gray(image: np.ndarray) -> np.ndarray:
+    """ Image bhwc/hwc to bhw/hw.
+        Adaptation of images read by cv2.imread by default (usually 3 channels).
 
     Args:
         image (np.array): _description_
@@ -155,7 +171,15 @@ def convert2gray(image: np.array) -> np.array:
     """
     channels = image.shape[-1]
     if channels == 3:
-        gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        if image.ndim == 3:
+            gray_image = cv2.cvtColor(image.astype('uint8'),
+                                      cv2.COLOR_BGR2GRAY)
+        else:
+            gray_image = np.stack([
+                cv2.cvtColor(image[i].astype('uint8'), cv2.COLOR_BGR2GRAY)
+                for i in range(image.shape[0])
+            ],
+                                  axis=0)
     elif channels == 1:
         gray_image = np.squeeze(image, axis=-1)
     return gray_image
