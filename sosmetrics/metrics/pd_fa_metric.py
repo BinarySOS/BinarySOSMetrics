@@ -22,6 +22,7 @@ class PD_FAMetric(BaseMetric):
                  second_match: str = 'none',
                  **kwargs: Any):
         """
+        Target Level Pd and Pixel Level Fa.
         Original Code: https://github.com/XinyiYing/BasicIRSTD/blob/main/metrics.py
 
         Paper:

@@ -17,7 +17,8 @@ from .utils import _TYPES, convert2format
 class AUC_ROC_PRMetric(BaseMetric):
 
     def __init__(self, bins: int = 30, **kwargs: Any):
-        """length of tpr, fpr are bins+1.
+        """Pixel Level Curve.
+        length of tpr, fpr are bins+1.
 
         .get() will return auc_roc, auc_pr, fpr, tpr, precision,
             recall in array.

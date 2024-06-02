@@ -329,7 +329,7 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
             preds (_TYPES): Preds images or image paths in list or single.
         """
 
-        def evaluate_worker(label, pred):
+        def evaluate_worker(self, label, pred):
             coord_label, gray_label = _get_label_coord_and_gray(label)
 
             for idx, conf_thr in enumerate(self.conf_thr):
@@ -349,16 +349,18 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
 
         labels, preds = convert2format(labels, preds)
 
-        for i in range(len(labels)):
-            evaluate_worker(labels[i], preds[i])
-        # threads = [threading.Thread(target=evaluate_worker,
-        #                             args=(self, labels[i], preds[i]),
-        #                             )
-        #            for i in range(len(labels))]
-        # for thread in threads:
-        #     thread.start()
-        # for thread in threads:
-        #     thread.join()
+        # for i in range(len(labels)):
+        #     evaluate_worker(labels[i], preds[i])
+        threads = [
+            threading.Thread(
+                target=evaluate_worker,
+                args=(self, labels[i], preds[i]),
+            ) for i in range(len(labels))
+        ]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
     @time_cost_deco
     def get(self) -> Tuple[np.ndarray]:

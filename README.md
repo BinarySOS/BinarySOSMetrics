@@ -8,7 +8,7 @@
 ## SOS!!!
 What should I evaluate about the Binary Small Object Segmentation(SOS) algorithm? Is there a simple and easy-to-use toolkit?
 
-## Types
+## Overview of Metrics
 | **Pixel Level** | **Target Level** | **Both** |
 |:---------------:|:----------------:|:--------:|
 |AUC_ROC_PR|                  |BinaryCenter|
@@ -16,7 +16,45 @@ What should I evaluate about the Binary Small Object Segmentation(SOS) algorithm
 |NormalizedIoU                 |           |TargetNormalizedIoU|
 
 
-
+<div align="center">
+  <b>Architectures</b>
+</div>
+<table align="center">
+  <tbody>
+    <tr align="center" valign="bottom">
+      <td>
+        <b>Pixel Level</b>
+      </td>
+      <td>
+        <b>Target Level</b>
+      </td>
+      <td>
+        <b>Both</b>
+      </td>
+    </tr>
+    <tr valign="top">
+      <td>
+        <ul>
+            <li><a href="sosmetrics/metrics/auc_roc_pr_metric.py">AUC_ROC_PR</a></li>
+            <li><a href="sosmetrics/metrics/pre_rec_f1_iou_metric.py">Precision Recall F1 IoU (DOI:10.1109/TAES.2023.3238703)</a></li>
+            <li><a href="sosmetrics/metrics/normalized_iou_metric.py">NormalizedIoU (DOI：10.1109/WACV48630.2021.00099)</a></li>
+      </ul>
+      </td>
+      <td>
+        <ul>
+          <li><a href="sosmetrics/metrics/">Placeholder</a></li>
+        </ul>
+      </td>
+      <td>
+        <ul>
+          <li><a href="configs/panoptic_fpn">Panoptic FPN (CVPR'2019)</a></li>
+        </ul>
+      </td>
+    </tr>
+</td>
+    </tr>
+  </tbody>
+</table>
 
 ## Installation
 ```bash

@@ -13,7 +13,8 @@ from .utils import _TYPES, _safe_divide, convert2format
 class Precision_Recall_F1_IoUMetric(BaseMetric):
 
     def __init__(self, conf_thr: float, **kwargs: Any):
-        """length of true positive rates(tpr), false positive(fpr) are bins+1.
+        """Pixel Level Precision, Recall, F1, IoU metric.
+        length of true positive rates(tpr), false positive(fpr) are bins+1.
 
         Args:
             bins (int, optional): score thresholds. Defaults to 30.
