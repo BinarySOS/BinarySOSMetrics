@@ -13,8 +13,23 @@ from .utils import _TYPES, _safe_divide, convert2format
 class PixelPrecisionRecallF1IoU(BaseMetric):
 
     def __init__(self, conf_thr: float, **kwargs: Any):
-        """Pixel Level Precision, Recall, F1, IoU metric.
+        """Pixel Level Precision, Recall, F1, IoU.
         length of true positive rates(tpr), false positive(fpr) are bins+1.
+
+        Paper:
+            @ARTICLE{10024907,
+            author={Zhang, Tianfang and Li, Lei and Cao, Siying and Pu, Tian and Peng, Zhenming},
+            journal={IEEE Transactions on Aerospace and Electronic Systems},
+            title={Attention-Guided Pyramid Context Networks for Detecting \
+                Infrared Small Target Under Complex Background},
+            year={2023},
+            volume={59},
+            number={4},
+            pages={4250-4261},
+            keywords={Semantics;Object detection;Feature extraction;Correlation;Fuses;\
+                Task analysis;Neural networks;Context module;feature fusion;\
+                    infrared small targets;pyramid context network},
+            doi={10.1109/TAES.2023.3238703}}
 
         Args:
             bins (int, optional): score thresholds. Defaults to 30.
