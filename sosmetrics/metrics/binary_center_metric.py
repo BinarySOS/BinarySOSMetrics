@@ -266,7 +266,8 @@ class BinaryCenterMetric(BaseMetric):
     def __repr__(self) -> str:
         message = (f'{self.__class__.__name__}'
                    f'(dilate_kernel_size={self.dilate_kernel_size}, '
-                   f'match_alg={self.match_alg}, iou_mode={self.iou_mode})')
+                   f'match_alg={self.match_alg}, iou_mode={self.iou_mode} '
+                   f'conf_thr={self.conf_thr})')
         return message
 
 
@@ -401,3 +402,9 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         df = pd.DataFrame(all_metric)
         df.index = ['Dis-Thr', 'AP']
         return df
+
+    def __repr__(self) -> str:
+        message = (f'{self.__class__.__name__}'
+                   f'(dilate_kernel_size={self.dilate_kernel_size}, '
+                   f'match_alg={self.match_alg}, iou_mode={self.iou_mode}')
+        return message

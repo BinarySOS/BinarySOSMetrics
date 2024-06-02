@@ -11,9 +11,9 @@ What should I evaluate about the Binary Small Object Segmentation(SOS) algorithm
 ## Types
 | **Pixel Level** | **Target Level** | **Both** |
 |:---------------:|:----------------:|:--------:|
-|AUC_ROC_PRMetric |                  |BinaryCenterMetric|
-|Precision_Recall_F1_IoUMetric|                  |PD_FAMetric|
-|                 |                  |          |
+|AUC_ROC_PR|                  |BinaryCenter|
+|Precision_Recall_F1_IoU|                  |PD_FA|
+|NormalizedIoU                 |                  |          |
 
 
 

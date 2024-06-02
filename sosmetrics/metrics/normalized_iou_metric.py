@@ -27,6 +27,11 @@ class NormalizedIoU(BaseMetric):
         year    =  {2021}
         }
 
+        math: $\begin{aligned}\text{nIoU}&=\frac{1}{N}\\sum_i^N\frac{\text{TP}[i]} \
+                {\text{T}[i]+\text{P}[i]-\text{TP}[i]}\\end{aligned}$
+                N is number of images, TP is the number of true positive pixels, \
+                    T is the number of ground truth positive pixels, \
+                    P is the number of predicted positive pixels.
         Args:
             conf_thr (float): _description_, Defaults to 0.5.
         """
@@ -115,6 +120,19 @@ class TargetNormalizedIoU(NormalizedIoU):
                  dis_thr: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
                  **kwargs: Any):
+        """We did the optimisation.
+            The task in the original code is to have only one target per image.
+            In this implementation, we can have multiple targets per image.
+            N is the number of ground truth targets, TP is the number of true positive targets, \
+                T is the number of ground truth targets, \
+                P is the number of predicted targets.
+
+
+        Args:
+            conf_thr (float, optional): _description_. Defaults to 0.5.
+            dis_thr (Union[List[int], int], optional): _description_. Defaults to [1, 10].
+            match_alg (str, optional): _description_. Defaults to 'forloop'.
+        """
         self.dis_thr = _adjust_dis_thr_arg(dis_thr)
         self.match_alg = match_alg
         super().__init__(conf_thr=conf_thr, **kwargs)
@@ -150,6 +168,8 @@ class TargetNormalizedIoU(NormalizedIoU):
                 with self.lock:
                     self.total_iou[idx] = np.append(self.total_iou[idx], iou)
                     pass
+            with self.lock:
+                self.total_gt += distances.shape[0]
 
         labels, preds = convert2format(labels, preds)
 
@@ -168,7 +188,8 @@ class TargetNormalizedIoU(NormalizedIoU):
 
     @time_cost_deco
     def get(self):
-        self.target_niou = np.array([iou.mean() for iou in self.total_iou])
+        target_niou = np.array([iou.sum() for iou in self.total_iou])
+        self.target_niou = _safe_divide(target_niou, self.total_gt)
 
         if self.print_table:
             table = PrettyTable()
@@ -190,6 +211,7 @@ class TargetNormalizedIoU(NormalizedIoU):
 
     def reset(self) -> None:
         self.total_iou = [np.array([]) for _ in range(len(self.dis_thr))]
+        self.total_gt = np.zeros(1)
 
     def _get_matched_iou(self, distances: np.ndarray, mask_iou: np.ndarray,
                          threshold: int) -> np.ndarray:

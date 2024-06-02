@@ -90,8 +90,7 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
     @property
     def table(self):
         all_metric = np.stack(
-            [self.precision, self.recall, self.f1_score,
-             self.iou])[:, np.newaxis].T
+            [self.precision, self.recall, self.f1_score, self.iou]).T
         df = pd.DataFrame(all_metric)
         df.columns = [
             f'Precision-{self.conf_thr}', f'Recall-{self.conf_thr}',
