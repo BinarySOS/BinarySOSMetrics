@@ -13,7 +13,7 @@ What should I evaluate about the Binary Small Object Segmentation(SOS) algorithm
 |:---------------:|:----------------:|:--------:|
 |AUC_ROC_PR|                  |BinaryCenter|
 |Precision_Recall_F1_IoU|                  |PD_FA|
-|NormalizedIoU                 |                  |          |
+|NormalizedIoU                 |           |TargetNormalizedIoU|
 
 
 
