@@ -10,7 +10,7 @@ from .base import BaseMetric, time_cost_deco
 from .utils import _TYPES, _safe_divide, convert2format
 
 
-class Precision_Recall_F1_IoUMetric(BaseMetric):
+class PixelPrecisionRecallF1IoU(BaseMetric):
 
     def __init__(self, conf_thr: float, **kwargs: Any):
         """Pixel Level Precision, Recall, F1, IoU metric.
@@ -80,6 +80,10 @@ class Precision_Recall_F1_IoUMetric(BaseMetric):
         self.fp = np.zeros((1))
         self.fn = np.zeros((1))
         self.tn = np.zeros((1))
+        self.f1_score = np.zeros((1))
+        self.iou = np.zeros((1))
+        self.recall = np.zeros((1))
+        self.precision = np.zeros((1))
 
     def _confusion_mat(self, label: np.array, pred: np.array,
                        score_thresh: float):

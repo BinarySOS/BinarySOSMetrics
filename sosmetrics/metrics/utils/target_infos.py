@@ -2,10 +2,12 @@ from typing import List, Tuple
 
 import numpy as np
 import torch
+from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
 from .bbox_overlaps import bbox_overlaps
 from .mask_overlaps import target_mask_iou
+from .misc import convert2gray
 
 
 def calculate_target_infos(coord_label: List[RegionProperties],
@@ -23,7 +25,7 @@ def calculate_target_infos(coord_label: List[RegionProperties],
             NotImplementedError: _description_
 
         Returns:
-            np.ndarray: distances between label and pred. (num_lbl * num_pred)
+            np.ndarray: distances, mask iou, bbox iou between label and pred.
         """
 
     num_lbl = len(coord_label)  # number of label
@@ -63,3 +65,27 @@ def calculate_target_infos(coord_label: List[RegionProperties],
     mask_iou = target_mask_iou(gt_mask, pred_mask)  # num_lbl * num_pred
 
     return eul_distance, mask_iou, bbox_iou
+
+
+def get_label_coord_and_gray(
+        label: np.ndarray) -> Tuple[RegionProperties, np.ndarray]:
+    cur_label = label > 0  # sometimes is 0-1, force to 255.
+    cur_label = cur_label.astype('uint8')
+    cur_label = convert2gray(cur_label).astype('int64')
+    cur_label = measure.label(cur_label, connectivity=2)
+    coord_label = measure.regionprops(cur_label)
+    return coord_label, cur_label
+
+
+def get_pred_coord_and_gray(
+    pred: np.ndarray,
+    conf_thr: float,
+) -> Tuple[RegionProperties, np.ndarray]:
+    cur_pred = pred >= conf_thr
+    cur_pred = cur_pred.astype('uint8')
+    # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
+    # 'int64' is for measure.label().
+    cur_pred = convert2gray(cur_pred).astype('int64')
+    pred_img = measure.label(cur_pred, connectivity=2)
+    coord_pred = measure.regionprops(pred_img)
+    return coord_pred, cur_pred

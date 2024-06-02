@@ -1,71 +1,24 @@
 import threading
 from typing import Any, List, Tuple, Union
 
-import cv2
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
 from scipy.optimize import linear_sum_assignment
-from skimage import measure
-from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric, time_cost_deco
 from .utils import (_TYPES, _adjust_conf_thr_arg, _adjust_dis_thr_arg,
                     _safe_divide, calculate_target_infos, convert2format,
-                    convert2gray)
+                    get_label_coord_and_gray, get_pred_coord_and_gray)
 
 
-def _get_dilated(image: np.ndarray,
-                 dilate_kernel_size: List[int] = [0, 0]) -> np.ndarray:
-    """_summary_
-
-    Args:
-        image (np.ndarray): hwc of np.ndarray.
-    """
-
-    kernel = np.ones(dilate_kernel_size, np.uint8)
-    if kernel.sum() == 0:
-        return image
-    dilated_image = cv2.dilate(image, kernel, iterations=1)
-
-    return dilated_image
-
-
-def _get_label_coord_and_gray(
-        label: np.ndarray) -> Tuple[RegionProperties, np.ndarray]:
-    label = label > 0  # sometimes is 0-1, force to 255.
-    label = label.astype('uint8')
-    label = convert2gray(label).astype('int64')
-    label = measure.label(label, connectivity=2)
-    coord_label = measure.regionprops(label)
-    return coord_label, label
-
-
-def _get_pred_coord_and_gray(pred: np.ndarray,
-                             conf_thr: float,
-                             dilate_kernel_size: List[int] = [0, 0]
-                             ) -> Tuple[RegionProperties, np.ndarray]:
-    cur_pred = pred >= conf_thr
-    cur_pred = cur_pred.astype('uint8')
-    # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
-    # 'int64' is for measure.label().
-
-    cur_pred = convert2gray(cur_pred)
-    dilated_pred = _get_dilated(cur_pred, dilate_kernel_size).astype('int64')
-
-    pred_img = measure.label(dilated_pred, connectivity=2)
-    coord_pred = measure.regionprops(pred_img)
-    return coord_pred, cur_pred
-
-
-class BinaryCenterMetric(BaseMetric):
+class TargetPrecisionRecallF1(BaseMetric):
 
     def __init__(self,
                  dis_thr: Union[List[int], int] = [1, 10],
                  conf_thr: float = 0.5,
-                 dilate_kernel_size: List[int] = [7, 7],
-                 match_alg: str = 'hungarian',
-                 iou_mode: str = 'none',
+                 match_alg: str = 'forloop',
+                 second_match: str = 'none',
                  **kwargs: Any):
         """
         TP: True Positive, GT is Positive and Pred is Positive, If Euclidean Distance < threshold, matched.
@@ -86,20 +39,18 @@ class BinaryCenterMetric(BaseMetric):
                 if List, closed interval.
                 Defaults to [1, 10].
             cong_thr (float, optional): confidence threshold. Defaults to 0.5.
-            dilate_kernel_size (List[int], optional): kernel size of cv2.dilated.
-                The difference is that when [0, 0], the dilation algorithm will not be used. Defaults to [7, 7].
             match_alg (str, optional): 'hungarian' or 'forloop' to match pred and gt,
                 'forloop'is the original implementation of PD_FA,
-                based on the first-match principle.Usually, hungarian is fast and accurate. Defaults to 'hungarian'.
-            iou_mode (str, optional): 'none', 'mask_iou', 'bbox_iou'. if not 'none', (eul_dis + '**_iou') for match.
+                based on the first-match principle.. Defaults to 'forloop'.
+            second_match (str, optional): 'none' or 'mask_iou' to match pred and gt after distance matching. \
+                Defaults to 'none'.
         """
 
         super().__init__(**kwargs)
         self.dis_thr = _adjust_dis_thr_arg(dis_thr)
         self.conf_thr = np.array([conf_thr])
         self.match_alg = match_alg
-        self.dilate_kernel_size = dilate_kernel_size
-        self.iou_mode = iou_mode
+        self.second_match = second_match
         self.lock = threading.Lock()
         self.reset()
 
@@ -119,9 +70,10 @@ class BinaryCenterMetric(BaseMetric):
         """
 
         def evaluate_worker(self, label, pred):
-            coord_label, gray_label = _get_label_coord_and_gray(label)
-            coord_pred, gray_pred = _get_pred_coord_and_gray(
-                pred.copy(), self.conf_thr, self.dilate_kernel_size)
+            # to unit8 for ``convert2gray()``
+            coord_label, gray_label = get_label_coord_and_gray(label)
+            coord_pred, gray_pred = get_pred_coord_and_gray(
+                pred.copy(), self.conf_thr)
             distances, mask_iou, bbox_iou = calculate_target_infos(
                 coord_label, coord_pred, gray_pred.shape[0],
                 gray_pred.shape[1])
@@ -130,6 +82,18 @@ class BinaryCenterMetric(BaseMetric):
                 print(f'mask_iou={mask_iou}')
                 print(f'eul_distance={distances}')
                 print('____' * 20)
+
+            if self.second_match == 'mask_iou':
+                mask_iou[mask_iou == 0.] = np.inf
+                mask_iou[mask_iou != np.inf] = 0.
+                distances = distances + mask_iou
+
+                if self.debug:
+                    print(f'after second match mask iou={mask_iou}')
+                    print(
+                        f'after second matche eul distance={distances + mask_iou}'
+                    )
+                    print('____' * 20)
 
             for idx, threshold in enumerate(self.dis_thr):
                 TP, FN, FP = self._calculate_tp_fn_fp(distances.copy(),
@@ -166,7 +130,7 @@ class BinaryCenterMetric(BaseMetric):
         head = ['Dis-Thr']
         head.extend(self.dis_thr.tolist())
         table = PrettyTable()
-        table.add_column('Threshold', self.dis_thr)
+        table.add_column('Dis-Thr', self.dis_thr)
         table.add_column('TP', ['{:.0f}'.format(num) for num in self.TP])
         table.add_column('FP', ['{:.0f}'.format(num) for num in self.FP])
         table.add_column('FN', ['{:.0f}'.format(num) for num in self.FN])
@@ -198,20 +162,6 @@ class BinaryCenterMetric(BaseMetric):
         df = pd.DataFrame(all_metric)
         df.columns = ['dis_thr', 'TP', 'FP', 'FN', 'Precision', 'Recall', 'F1']
         return df
-
-        # if self.iou_mode == 'mask_iou':
-        #     reciprocal = np.reciprocal(mask_iou, where=mask_iou != 0)
-        #     return eul_distance + reciprocal
-        # elif self.iou_mode == 'bbox_iou':
-        #     reciprocal = np.reciprocal(bbox_iou, where=bbox_iou != 0)
-        #     return eul_distance + reciprocal
-        # elif self.iou_mode == 'none':
-        #     return eul_distance
-
-        # else:
-        #     raise NotImplementedError(
-        #         f"{self.iou_mode} is not implemented, please use 'none', 'bbox_iou', 'mask_iou' for distances."
-        #     )
 
     def _calculate_tp_fn_fp(self, distances: np.ndarray,
                             threshold: int) -> Tuple[int]:
@@ -265,20 +215,17 @@ class BinaryCenterMetric(BaseMetric):
 
     def __repr__(self) -> str:
         message = (f'{self.__class__.__name__}'
-                   f'(dilate_kernel_size={self.dilate_kernel_size}, '
-                   f'match_alg={self.match_alg}, iou_mode={self.iou_mode} '
+                   f'(match_alg={self.match_alg} '
                    f'conf_thr={self.conf_thr})')
         return message
 
 
-class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
+class TargetAveragePrecision(TargetPrecisionRecallF1):
 
     def __init__(self,
                  dis_thr: Union[List[int], int] = [1, 10],
                  conf_thr: Union[int, List[float], np.ndarray] = 10,
-                 dilate_kernel_size: List[int] = [7, 7],
-                 match_alg: str = 'hungarian',
-                 iou_mode: str = 'none',
+                 match_alg: str = 'forloop',
                  **kwargs: Any):
         """
         Compute AP for each dis_thr, and Precision, Recall, F1 for each dis_thr and conf_thr.
@@ -306,9 +253,7 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         """
         super().__init__(dis_thr=dis_thr,
                          conf_thr=0.5,
-                         dilate_kernel_size=dilate_kernel_size,
                          match_alg=match_alg,
-                         iou_mode=iou_mode,
                          **kwargs)
 
         self.conf_thr = _adjust_conf_thr_arg(conf_thr)
@@ -330,11 +275,12 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         """
 
         def evaluate_worker(self, label, pred):
-            coord_label, gray_label = _get_label_coord_and_gray(label)
+            coord_label, gray_label = get_label_coord_and_gray(label)
 
             for idx, conf_thr in enumerate(self.conf_thr):
-                coord_pred, gray_pred = _get_pred_coord_and_gray(
-                    pred.copy(), conf_thr, self.dilate_kernel_size)
+                coord_pred, gray_pred = get_pred_coord_and_gray(
+                    pred.copy(), conf_thr)
+
                 distances, _, _ = calculate_target_infos(
                     coord_label, coord_pred, gray_pred.shape[0],
                     gray_pred.shape[1])
@@ -397,6 +343,7 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
         self.Precision = np.zeros((len(self.dis_thr), len(self.conf_thr)))
         self.Recall = np.zeros((len(self.dis_thr), len(self.conf_thr)))
         self.F1 = np.zeros((len(self.dis_thr), len(self.conf_thr)))
+        self.AP = np.zeros(len(self.dis_thr))
 
     @property
     def table(self):
@@ -407,6 +354,5 @@ class BinaryCenterAveragePrecisionMetric(BinaryCenterMetric):
 
     def __repr__(self) -> str:
         message = (f'{self.__class__.__name__}'
-                   f'(dilate_kernel_size={self.dilate_kernel_size}, '
-                   f'match_alg={self.match_alg}, iou_mode={self.iou_mode}')
+                   f'(match_alg={self.match_alg})')
         return message

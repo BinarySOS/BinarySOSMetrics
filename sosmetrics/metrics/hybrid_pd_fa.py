@@ -4,16 +4,15 @@ from typing import Any, List, Tuple, Union
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
-from scipy.optimize import linear_sum_assignment
-from skimage import measure
 from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric, time_cost_deco
 from .utils import (_TYPES, _adjust_dis_thr_arg, _safe_divide,
-                    calculate_target_infos, convert2format, convert2gray)
+                    calculate_target_infos, convert2format,
+                    get_label_coord_and_gray, get_pred_coord_and_gray)
 
 
-class PD_FAMetric(BaseMetric):
+class TargetPdPixelFa(BaseMetric):
 
     def __init__(self,
                  conf_thr: float = 0.5,
@@ -65,16 +64,15 @@ class PD_FAMetric(BaseMetric):
             conf_thr (float, Optional): Confidence threshold. Defaults to 0.5.
             dis_thr (Union[List[int], int], optional): dis_thr of Euclidean distance,
                 if List, closed interval. . Defaults to [1,10].
-            match_alg (str, optional): 'hungarian' or 'forloop' to match pred and gt,
+            match_alg (str, optional):'forloop' to match pred and gt,
                 'forloop'is the original implementation of PD_FA,
                 based on the first-match principle. Defaults to 'forloop'
-                But, usually, hungarian is fast and accurate.
-            second_math (str, optional): 'none' or 'mask_iou' to match pred and gt after distance matching. \
+            second_match (str, optional): 'none' or 'mask_iou' to match pred and gt after distance matching. \
                 Defaults to 'none'.
         """
         super().__init__(**kwargs)
         self.dis_thr = _adjust_dis_thr_arg(dis_thr)
-        self.conf_thr = conf_thr
+        self.conf_thr = np.array([conf_thr])
         self.match_alg = match_alg
         self.second_match = second_match
         self.lock = threading.Lock()
@@ -85,24 +83,15 @@ class PD_FAMetric(BaseMetric):
 
         def evaluate_worker(self, label: np.array, pred: np.array) -> None:
             # to unit8 for ``convert2gray()``
-            pred = pred > self.conf_thr
-            pred = pred.astype('uint8')
-
-            # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
-            # 'int64' is for measure.label().
-            gray_pred = convert2gray(pred).astype('int64')
-            gray_label = convert2gray(label).astype('int64')
-
-            image = measure.label(gray_pred, connectivity=2)
-            coord_pred = measure.regionprops(image)
-
-            image = measure.label(gray_label, connectivity=2)
-            coord_label = measure.regionprops(image)
-            distances, mask_iou, _ = calculate_target_infos(
+            coord_label, gray_label = get_label_coord_and_gray(label)
+            coord_pred, gray_pred = get_pred_coord_and_gray(
+                pred.copy(), self.conf_thr)
+            distances, mask_iou, bbox_iou = calculate_target_infos(
                 coord_label, coord_pred, gray_pred.shape[0],
                 gray_pred.shape[1])
 
             if self.debug:
+                print(f'bbox_iou={bbox_iou}')
                 print(f'mask_iou={mask_iou}')
                 print(f'eul_distance={distances}')
                 print('____' * 20)
@@ -173,6 +162,7 @@ class PD_FAMetric(BaseMetric):
         self.FD = np.zeros_like(self.dis_thr)
         self.NP = np.zeros_like(self.dis_thr)
         self.AT = np.zeros_like(self.dis_thr)
+        self.PD = np.zeros_like(self.dis_thr)
 
     @property
     def table(self):
@@ -206,16 +196,6 @@ class PD_FAMetric(BaseMetric):
         if num_lbl * num_pred == 0:
             # no lbl or no pred
             TD = 0
-
-        elif self.match_alg == 'hungarian':
-            row_indexes, col_indexes = linear_sum_assignment(distances)
-            selec_distance = distances[row_indexes, col_indexes]
-            matched = selec_distance < threshold
-            TD = np.sum(matched)
-            for j in col_indexes[
-                    matched]:  # col_indexes present matched pred index.
-                true_img[coord_pred[j].coords[:, 0],
-                         coord_pred[j].coords[:, 1]] = 1
 
         elif self.match_alg == 'forloop':
             for i in range(num_lbl):

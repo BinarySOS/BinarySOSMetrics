@@ -14,7 +14,7 @@ from .utils import _TYPES, convert2format
 
 
 # codespell:ignore fpr
-class AUC_ROC_PRMetric(BaseMetric):
+class PixelROCPrecisionRecall(BaseMetric):
 
     def __init__(self, bins: int = 30, **kwargs: Any):
         """Pixel Level Curve.
@@ -86,6 +86,9 @@ class AUC_ROC_PRMetric(BaseMetric):
     def reset(self):
         self.roc_curve_fn.reset()
         self.pr_curve_fn.reset()
+        self.auc_roc = 0
+        self.auc_pr = 0
+        self.ap = 0
 
     @property
     def table(self):
