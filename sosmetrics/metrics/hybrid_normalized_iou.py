@@ -20,6 +20,7 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                  conf_thr: float = 0.5,
                  dis_thr: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
+                 second_match: str = 'none',
                  **kwargs: Any):
         """We did the optimisation.
             The task in the original code is to have only one target per image.
@@ -36,6 +37,7 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
         """
         self.dis_thr = _adjust_dis_thr_arg(dis_thr)
         self.match_alg = match_alg
+        self.second_match = second_match
         super().__init__(conf_thr=conf_thr, **kwargs)
 
     @time_cost_deco
@@ -126,4 +128,6 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                                   j] = np.inf  # Set inf to mark matched preds.
                         iou = np.append(iou, mask_iou[i, j])
                         break
+        else:
+            raise ValueError(f'Unknown match_alg: {self.match_alg}')
         return iou

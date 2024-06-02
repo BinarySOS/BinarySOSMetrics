@@ -41,8 +41,7 @@ class TargetPdPixelFa(BaseMetric):
 
         We have made the following improvements
             1. Supports multi-threading as well as batch processing.
-            2. Supports the Hungarian algorithm to match gt and pred, which is faster and more accurate.
-            3. Supports secondary matching using mask iou.
+            2. Supports secondary matching using mask iou.
 
         Original setting: conf_thr=0.5, dis_thr=3, match_alg='forloop', second_match='none'
 
@@ -210,8 +209,7 @@ class TargetPdPixelFa(BaseMetric):
             TD = distances[distances == np.inf].size // num_lbl
 
         else:
-            raise NotImplementedError(
-                f'match_alg={self.match_alg} is not implemented.')
+            raise ValueError(f'Unknown match_alg: {self.match_alg}')
 
         FD = (pred_img - true_img).sum()
         NP = pred_img.shape[0] * pred_img.shape[1]

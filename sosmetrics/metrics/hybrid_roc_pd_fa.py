@@ -42,8 +42,7 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
 
         We have made the following improvements
             1. Supports multi-threading as well as batch processing.
-            2. Supports the Hungarian algorithm to match gt and pred, which is faster and more accurate.
-            3. Supports secondary matching using mask iou.
+            2. Supports secondary matching using mask iou.
 
         Original setting: conf_thr=0.5, dis_thr=3, match_alg='forloop', second_match='none'
 
