@@ -16,7 +16,7 @@ from .utils import (_TYPES, _adjust_conf_thr_arg, _safe_divide,
 class TargetPdPixelFaROC(TargetPdPixelFa):
 
     def __init__(self,
-                 conf_thr: float = 0.5,
+                 conf_thr: Union[int, List[float], np.ndarray] = 10,
                  dis_thr: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
                  second_match: str = 'none',

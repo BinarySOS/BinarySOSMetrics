@@ -388,13 +388,13 @@ class mNoCoAP(BaseMetric):
                 self.num_batch += 1
 
         if isinstance(labels, (np.ndarray, torch.Tensor)):
-            evaluate_worker(self, labels, preds)
+            evaluate_worker(self, labels, preds, batch)
 
         elif isinstance(labels, (list, tuple)):
             threads = [
                 threading.Thread(
                     target=evaluate_worker,
-                    args=(self, labels[i], preds[i]),
+                    args=(self, labels[i], preds[i], batch[i]),
                 ) for i in range(len(labels))
             ]
             for thread in threads:
