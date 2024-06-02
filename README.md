@@ -37,7 +37,7 @@ What should I evaluate about the Binary Small Object Segmentation(SOS) algorithm
         <ul>
             <li><a href="sosmetrics/metrics/auc_roc_pr_metric.py">AUC_ROC_PR</a></li>
             <li><a href="sosmetrics/metrics/pre_rec_f1_iou_metric.py">Precision Recall F1 IoU (DOI:10.1109/TAES.2023.3238703)</a></li>
-            <li><a href="sosmetrics/metrics/normalized_iou_metric.py">NormalizedIoU (DOI：10.1109/WACV48630.2021.00099)</a></li>
+            <li><a href="sosmetrics/metrics/normalized_iou_metric.py">NormalizedIoU (DOI:10.1109/WACV48630.2021.00099)</a></li>
       </ul>
       </td>
       <td>
@@ -47,7 +47,7 @@ What should I evaluate about the Binary Small Object Segmentation(SOS) algorithm
       </td>
       <td>
         <ul>
-          <li><a href="configs/panoptic_fpn">Panoptic FPN (CVPR'2019)</a></li>
+          <li><a href="sosmetrics/metrics/pd_fa_metric.py">Pd_Fa (DOI:10.1109/TIP.2022.3199107)</a></li>
         </ul>
       </td>
     </tr>
