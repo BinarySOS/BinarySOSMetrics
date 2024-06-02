@@ -18,6 +18,7 @@ class PixelROCPrecisionRecall(BaseMetric):
 
     def __init__(self, bins: int = 30, **kwargs: Any):
         """Pixel Level Curve.
+        Calculate the curve of Precision, Recall, AP, AUC ROC for a given set of confidence thresholds.
         length of tpr, fpr are bins+1.
 
         .get() will return auc_roc, auc_pr, fpr, tpr, precision,

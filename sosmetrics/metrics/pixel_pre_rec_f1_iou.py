@@ -13,8 +13,8 @@ from .utils import _TYPES, _safe_divide, convert2format
 class PixelPrecisionRecallF1IoU(BaseMetric):
 
     def __init__(self, conf_thr: float, **kwargs: Any):
-        """Pixel Level Precision, Recall, F1, IoU.
-        length of true positive rates(tpr), false positive(fpr) are bins+1.
+        """Pixel Level.
+            Calculate Precision, Recall, F1, IoU for a given confidence threshold.
 
         Paper:
             @ARTICLE{10024907,

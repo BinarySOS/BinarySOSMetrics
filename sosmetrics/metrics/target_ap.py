@@ -75,9 +75,28 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                 coord_pred, gray_pred = get_pred_coord_and_gray(
                     pred.copy(), conf_thr)
 
-                distances, _, _ = calculate_target_infos(
+                distances, mask_iou, bbox_iou = calculate_target_infos(
                     coord_label, coord_pred, gray_pred.shape[0],
                     gray_pred.shape[1])
+
+                if self.debug:
+                    print(f'bbox_iou={bbox_iou}')
+                    print(f'mask_iou={mask_iou}')
+                    print(f'eul_distance={distances}')
+                    print('____' * 20)
+
+                if self.second_match == 'mask_iou':
+                    mask_iou[mask_iou == 0.] = np.inf
+                    mask_iou[mask_iou != np.inf] = 0.
+                    distances = distances + mask_iou
+
+                    if self.debug:
+                        print(f'after second match mask iou={mask_iou}')
+                        print(
+                            f'after second matche eul distance={distances + mask_iou}'
+                        )
+                        print('____' * 20)
+
                 for jdx, threshold in enumerate(self.dis_thr):
                     TP, FN, FP = self._calculate_tp_fn_fp(
                         distances.copy(), threshold)

@@ -57,6 +57,18 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                 print(f'eul_distance={distances}')
                 print('____' * 20)
 
+            if self.second_match == 'mask_iou':
+                mask_iou[mask_iou == 0.] = np.inf
+                mask_iou[mask_iou != np.inf] = 0.
+                distances = distances + mask_iou
+
+                if self.debug:
+                    print(f'after second match mask iou={mask_iou}')
+                    print(
+                        f'after second matche eul distance={distances + mask_iou}'
+                    )
+                    print('____' * 20)
+
             for idx, threshold in enumerate(self.dis_thr):
                 iou = self._get_matched_iou(distances.copy(), mask_iou.copy(),
                                             threshold)  # (num_lbl or num_pred)

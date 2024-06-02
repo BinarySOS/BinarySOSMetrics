@@ -29,7 +29,7 @@ What should I evaluate about the Binary Small Object Segmentation(SOS) algorithm
     <tr valign="top">
       <td>
         <ul>
-            <li><a href="sosmetrics/metrics/pixel_auc_roc_ap_pr.py">AUC_ROC_AP_PR</a></li>
+            <li><a href="sosmetrics/metrics/pixel_auc_roc_ap_pr.py">AUC ROC AP PR</a></li>
             <li><a href="sosmetrics/metrics/pixel_pre_rec_f1_iou.py">Precision Recall F1 IoU (DOI:10.1109/TAES.2023.3238703)</a></li>
             <li><a href="sosmetrics/metrics/pixel_normalized_iou.py">NormalizedIoU (DOI:10.1109/WACV48630.2021.00099)</a></li>
       </ul>
