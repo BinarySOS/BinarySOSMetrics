@@ -16,23 +16,24 @@ from .utils import _TYPES, convert2format
 # codespell:ignore fpr
 class PixelROCPrecisionRecall(BaseMetric):
 
-    def __init__(self, bins: int = 30, **kwargs: Any):
+    def __init__(self, conf_thrs: int = 10, **kwargs: Any):
         """Pixel Level Curve.
         Calculate the curve of Precision, Recall, AP, AUC ROC for a given set of confidence thresholds.
-        length of tpr, fpr are bins+1.
+        length of tpr, fpr are conf_thrs+1.
 
         .get() will return auc_roc, auc_pr, fpr, tpr, precision,
             recall in array.
         Args:
-            bins (int, optional): score thresholds. Defaults to 30.
+            conf_thrs (int, optional): score thresholds. Defaults to 30.
         """
         super().__init__(**kwargs)
-        self.bins = bins
+        self.conf_thrs = conf_thrs
         self.lock = threading.Lock()
-        self.roc_curve_fn = BinaryROC(thresholds=self.bins)
-        self.pr_curve_fn = BinaryPrecisionRecallCurve(thresholds=self.bins)
+        self.roc_curve_fn = BinaryROC(thresholds=self.conf_thrs)
+        self.pr_curve_fn = BinaryPrecisionRecallCurve(
+            thresholds=self.conf_thrs)
         # Average precision is not equal to auc_pr. This is due to the way the calculations are made
-        self.ap_fn = BinaryAveragePrecision(thresholds=self.bins)
+        self.ap_fn = BinaryAveragePrecision(thresholds=self.conf_thrs)
         self.reset()
 
     @time_cost_deco

@@ -16,7 +16,7 @@ class TargetPdPixelFa(BaseMetric):
 
     def __init__(self,
                  conf_thr: float = 0.5,
-                 dis_thr: Union[List[int], int] = [1, 10],
+                 dis_thrs: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
                  second_match: str = 'none',
                  **kwargs: Any):
@@ -43,7 +43,7 @@ class TargetPdPixelFa(BaseMetric):
             1. Supports multi-threading as well as batch processing.
             2. Supports secondary matching using mask iou.
 
-        Original setting: conf_thr=0.5, dis_thr=3, match_alg='forloop', second_match='none'
+        Original setting: conf_thr=0.5, dis_thrs=3, match_alg='forloop', second_match='none'
 
         Pipeline:
             1. get connectivity region of gt and pred
@@ -61,7 +61,7 @@ class TargetPdPixelFa(BaseMetric):
 
         Args:
             conf_thr (float, Optional): Confidence threshold. Defaults to 0.5.
-            dis_thr (Union[List[int], int], optional): dis_thr of Euclidean distance,
+            dis_thrs (Union[List[int], int], optional): dis_thrs of Euclidean distance,
                 if List, closed interval. . Defaults to [1,10].
             match_alg (str, optional):'forloop' to match pred and gt,
                 'forloop'is the original implementation of PD_FA,
@@ -70,7 +70,7 @@ class TargetPdPixelFa(BaseMetric):
                 Defaults to 'none'.
         """
         super().__init__(**kwargs)
-        self.dis_thr = _adjust_dis_thr_arg(dis_thr)
+        self.dis_thrs = _adjust_dis_thr_arg(dis_thrs)
         self.conf_thr = np.array([conf_thr])
         self.match_alg = match_alg
         self.second_match = second_match
@@ -107,7 +107,7 @@ class TargetPdPixelFa(BaseMetric):
                     )
                     print('____' * 20)
 
-            for idx, threshold in enumerate(self.dis_thr):
+            for idx, threshold in enumerate(self.dis_thrs):
                 AT, TD, FD, NP = self._calculate_at_td_fd_np(
                     distances.copy(), coord_pred, threshold, gray_pred)
                 with self.lock:
@@ -140,9 +140,9 @@ class TargetPdPixelFa(BaseMetric):
 
         if self.print_table:
             head = ['Threshold']
-            head.extend(self.dis_thr.tolist())
+            head.extend(self.dis_thrs.tolist())
             table = PrettyTable()
-            table.add_column('Threshold', self.dis_thr)
+            table.add_column('Threshold', self.dis_thrs)
             table.add_column('TD', ['{:.0f}'.format(num) for num in self.TD])
             table.add_column('AT', ['{:.0f}'.format(num) for num in self.AT])
             table.add_column('FD', ['{:.0f}'.format(num) for num in self.FD])
@@ -156,22 +156,22 @@ class TargetPdPixelFa(BaseMetric):
         return self.PD, self.FA
 
     def reset(self) -> None:
-        self.FA = np.zeros_like(self.dis_thr)
-        self.TD = np.zeros_like(self.dis_thr)
-        self.FD = np.zeros_like(self.dis_thr)
-        self.NP = np.zeros_like(self.dis_thr)
-        self.AT = np.zeros_like(self.dis_thr)
-        self.PD = np.zeros_like(self.dis_thr)
+        self.FA = np.zeros_like(self.dis_thrs)
+        self.TD = np.zeros_like(self.dis_thrs)
+        self.FD = np.zeros_like(self.dis_thrs)
+        self.NP = np.zeros_like(self.dis_thrs)
+        self.AT = np.zeros_like(self.dis_thrs)
+        self.PD = np.zeros_like(self.dis_thrs)
 
     @property
     def table(self):
         all_metric = np.stack([
-            self.dis_thr, self.TD, self.AT, self.FD, self.NP, self.PD, self.FA
+            self.dis_thrs, self.TD, self.AT, self.FD, self.NP, self.PD, self.FA
         ],
                               axis=1)
         df_pd_fa = pd.DataFrame(all_metric)
         df_pd_fa.columns = [
-            'dis_thr', 'TD', 'AT', 'FD', 'NP', 'target_Pd', 'pixel_Fa'
+            'dis_thrs', 'TD', 'AT', 'FD', 'NP', 'target_Pd', 'pixel_Fa'
         ]
         return df_pd_fa
 
@@ -206,7 +206,7 @@ class TargetPdPixelFa(BaseMetric):
                                  coord_pred[j].coords[:, 1]] = 1
                         break
             # get number of inf columns, is equal to TD
-            TD = distances[distances == np.nan].size // num_lbl
+            TD = np.sum(np.isnan(distances)) // num_lbl
 
         else:
             raise ValueError(f'Unknown match_alg: {self.match_alg}')

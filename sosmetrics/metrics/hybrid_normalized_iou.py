@@ -18,7 +18,7 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
 
     def __init__(self,
                  conf_thr: float = 0.5,
-                 dis_thr: Union[List[int], int] = [1, 10],
+                 dis_thrs: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
                  second_match: str = 'none',
                  **kwargs: Any):
@@ -32,10 +32,10 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
 
         Args:
             conf_thr (float, optional): _description_. Defaults to 0.5.
-            dis_thr (Union[List[int], int], optional): _description_. Defaults to [1, 10].
+            dis_thrs (Union[List[int], int], optional): _description_. Defaults to [1, 10].
             match_alg (str, optional): Match algorithm. Defaults to 'forloop'.
         """
-        self.dis_thr = _adjust_dis_thr_arg(dis_thr)
+        self.dis_thrs = _adjust_dis_thr_arg(dis_thrs)
         self.match_alg = match_alg
         self.second_match = second_match
         super().__init__(conf_thr=conf_thr, **kwargs)
@@ -69,7 +69,7 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                     )
                     print('____' * 20)
 
-            for idx, threshold in enumerate(self.dis_thr):
+            for idx, threshold in enumerate(self.dis_thrs):
                 iou = self._get_matched_iou(distances.copy(), mask_iou.copy(),
                                             threshold)  # (num_lbl or num_pred)
 
@@ -102,7 +102,7 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
         if self.print_table:
             table = PrettyTable()
             head = ['Dis—Thr']
-            head.extend(self.dis_thr.tolist())
+            head.extend(self.dis_thrs.tolist())
             table.field_names = head
             niou_row = [f'nIoU-{self.conf_thr}']
             niou_row.extend(['{:.4f}'.format(num) for num in self.target_niou])
@@ -112,15 +112,15 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
 
     @property
     def table(self):
-        all_metric = np.vstack([self.dis_thr, self.target_niou])
+        all_metric = np.vstack([self.dis_thrs, self.target_niou])
         df = pd.DataFrame(all_metric)
         df.index = ['Dis-Thr', 'nIoU']
         return df
 
     def reset(self) -> None:
-        self.total_iou = [np.array([]) for _ in range(len(self.dis_thr))]
+        self.total_iou = [np.array([]) for _ in range(len(self.dis_thrs))]
         self.total_gt = np.zeros(1)
-        self.target_niou = np.zeros(len(self.dis_thr))
+        self.target_niou = np.zeros(len(self.dis_thrs))
 
     def _get_matched_iou(self, distances: np.ndarray, mask_iou: np.ndarray,
                          threshold: int) -> np.ndarray:

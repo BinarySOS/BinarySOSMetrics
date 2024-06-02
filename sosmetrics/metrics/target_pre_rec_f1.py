@@ -14,7 +14,7 @@ from .utils import (_TYPES, _adjust_dis_thr_arg, _safe_divide,
 class TargetPrecisionRecallF1(BaseMetric):
 
     def __init__(self,
-                 dis_thr: Union[List[int], int] = [1, 10],
+                 dis_thrs: Union[List[int], int] = [1, 10],
                  conf_thr: float = 0.5,
                  match_alg: str = 'forloop',
                  second_match: str = 'none',
@@ -29,12 +29,12 @@ class TargetPrecisionRecallF1(BaseMetric):
         .get will return Precision, Recall, F1 in array.
 
         Args:
-            dis_thr (Union[List[float], int], optional): dis_thr of Euclidean distance,
+            dis_thrs (Union[List[float], int], optional): dis_thrs of Euclidean distance,
                 - If set to an `int` , will use this value to distance threshold.
                 - If set to an `list` of float or int, will use the indicated thresholds \
-                    in the list as bins for the calculation
+                    in the list as conf_thr for the calculation
                 - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
-                bins for the calculation.
+                conf_thr for the calculation.
                 if List, closed interval.
                 Defaults to [1, 10].
             cong_thr (float, optional): confidence threshold. Defaults to 0.5.
@@ -46,7 +46,7 @@ class TargetPrecisionRecallF1(BaseMetric):
         """
 
         super().__init__(**kwargs)
-        self.dis_thr = _adjust_dis_thr_arg(dis_thr)
+        self.dis_thrs = _adjust_dis_thr_arg(dis_thrs)
         self.conf_thr = np.array([conf_thr])
         self.match_alg = match_alg
         self.second_match = second_match
@@ -94,7 +94,7 @@ class TargetPrecisionRecallF1(BaseMetric):
                     )
                     print('____' * 20)
 
-            for idx, threshold in enumerate(self.dis_thr):
+            for idx, threshold in enumerate(self.dis_thrs):
                 TP, FN, FP = self._calculate_tp_fn_fp(distances.copy(),
                                                       threshold)
                 with self.lock:
@@ -127,9 +127,9 @@ class TargetPrecisionRecallF1(BaseMetric):
         """
         self._calculate_precision_recall_f1()
         head = ['Dis-Thr']
-        head.extend(self.dis_thr.tolist())
+        head.extend(self.dis_thrs.tolist())
         table = PrettyTable()
-        table.add_column('Dis-Thr', self.dis_thr)
+        table.add_column('Dis-Thr', self.dis_thrs)
         table.add_column('TP', ['{:.0f}'.format(num) for num in self.TP])
         table.add_column('FP', ['{:.0f}'.format(num) for num in self.FP])
         table.add_column('FN', ['{:.0f}'.format(num) for num in self.FN])
@@ -144,22 +144,24 @@ class TargetPrecisionRecallF1(BaseMetric):
         return self.Precision, self.Recall, self.F1
 
     def reset(self):
-        self.TP = np.zeros_like(self.dis_thr)
-        self.FP = np.zeros_like(self.dis_thr)
-        self.FN = np.zeros_like(self.dis_thr)
-        self.Precision = np.zeros_like(self.dis_thr)
-        self.Recall = np.zeros_like(self.dis_thr)
-        self.F1 = np.zeros_like(self.dis_thr)
+        self.TP = np.zeros_like(self.dis_thrs)
+        self.FP = np.zeros_like(self.dis_thrs)
+        self.FN = np.zeros_like(self.dis_thrs)
+        self.Precision = np.zeros_like(self.dis_thrs)
+        self.Recall = np.zeros_like(self.dis_thrs)
+        self.F1 = np.zeros_like(self.dis_thrs)
 
     @property
     def table(self):
         all_metric = np.stack([
-            self.dis_thr, self.TP, self.FP, self.FN, self.Precision,
+            self.dis_thrs, self.TP, self.FP, self.FN, self.Precision,
             self.Recall, self.F1
         ],
                               axis=1)
         df = pd.DataFrame(all_metric)
-        df.columns = ['dis_thr', 'TP', 'FP', 'FN', 'Precision', 'Recall', 'F1']
+        df.columns = [
+            'dis_thrs', 'TP', 'FP', 'FN', 'Precision', 'Recall', 'F1'
+        ]
         return df
 
     def _calculate_tp_fn_fp(self, distances: np.ndarray,
@@ -187,7 +189,7 @@ class TargetPrecisionRecallF1(BaseMetric):
                     if distances[i, j] < threshold:
                         distances[:, j] = np.nan  # Set inf to mark matched
                         break
-            TP = distances[distances == np.nan].size // num_lbl
+            TP = np.sum(np.isnan(distances)) // num_lbl
 
         else:
             raise ValueError(

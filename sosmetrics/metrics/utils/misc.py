@@ -192,11 +192,11 @@ def _adjust_conf_thr_arg(
     Args:
         thresholds (Union[int, List[float], np.ndarray]):
             - If set to an `int` (larger than 1), will use that number of thresholds linearly spaced \
-                from 0 to 1 as bins for the calculation.
-            - If set to an `list` of floats, will use the indicated thresholds in the list as bins \
+                from 0 to 1 as conf_thrs for the calculation.
+            - If set to an `list` of floats, will use the indicated thresholds in the list as conf_thrs \
                 for the calculation
             - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
-                bins for the calculation.
+                conf_thrs for the calculation.
 
     Returns:
         np.ndarray: _description_
@@ -216,9 +216,9 @@ def _adjust_dis_thr_arg(
         thresholds (Union[int, float, List[float], np.ndarray]):
             - If set to an `int` , will use this value to distance threshold.
             - If set to an `list` of float or int, will use the indicated thresholds \
-                in the list as bins for the calculation
+                in the list as conf_thrs for the calculation
             - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
-            bins for the calculation.
+            conf_thrs for the calculation.
             if List, closed interval.
 
     Returns:

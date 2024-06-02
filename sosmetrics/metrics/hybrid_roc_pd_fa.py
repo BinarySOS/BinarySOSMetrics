@@ -16,8 +16,8 @@ from .utils import (_TYPES, _adjust_conf_thr_arg, _safe_divide,
 class TargetPdPixelFaROC(TargetPdPixelFa):
 
     def __init__(self,
-                 conf_thr: Union[int, List[float], np.ndarray] = 10,
-                 dis_thr: Union[List[int], int] = [1, 10],
+                 conf_thrs: Union[int, List[float], np.ndarray] = 10,
+                 dis_thrs: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
                  second_match: str = 'none',
                  **kwargs: Any):
@@ -44,7 +44,6 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
             1. Supports multi-threading as well as batch processing.
             2. Supports secondary matching using mask iou.
 
-        Original setting: conf_thr=0.5, dis_thr=3, match_alg='forloop', second_match='none'
 
         Pipeline:
             1. get connectivity region of gt and pred
@@ -61,8 +60,8 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
         FA: False-Alarm Rate, FA = FD/NP.
 
         Args:
-            conf_thr (float, Optional): Confidence threshold. Defaults to 0.5.
-            dis_thr (Union[List[int], int], optional): dis_thr of Euclidean distance,
+            conf_thrs (float, Optional): Confidence threshold. Defaults to 0.5.
+            dis_thrs (Union[List[int], int], optional): dis_thrs of Euclidean distance,
                 if List, closed interval. . Defaults to [1,10].
             match_alg (str, optional):'forloop' to match pred and gt,
                 'forloop'is the original implementation of PD_FA,
@@ -70,12 +69,12 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
             second_match (str, optional): 'none' or 'mask_iou' to match pred and gt after distance matching. \
                 Defaults to 'none'.
         """
-        super().__init__(dis_thr=dis_thr,
+        super().__init__(dis_thrs=dis_thrs,
                          conf_thr=0.5,
                          match_alg=match_alg,
                          second_match=second_match,
                          **kwargs)
-        self.conf_thr = _adjust_conf_thr_arg(conf_thr)
+        self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
         self.lock = threading.Lock()
         self.reset()
 
@@ -86,7 +85,7 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
             # to unit8 for ``convert2gray()``
             coord_label, gray_label = get_label_coord_and_gray(label)
 
-            for idx, conf_thr in enumerate(self.conf_thr):
+            for idx, conf_thr in enumerate(self.conf_thrs):
                 coord_pred, gray_pred = get_pred_coord_and_gray(
                     pred.copy(), conf_thr)
                 distances, mask_iou, bbox_iou = calculate_target_infos(
@@ -111,7 +110,7 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
                         )
                         print('____' * 20)
 
-                for jdx, threshold in enumerate(self.dis_thr):
+                for jdx, threshold in enumerate(self.dis_thrs):
                     AT, TD, FD, NP = self._calculate_at_td_fd_np(
                         distances.copy(), coord_pred, threshold, gray_pred)
                     with self.lock:
@@ -148,11 +147,11 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
         fa = np.concatenate([np.zeros((fa.shape[0], 1)), fa], axis=-1)
         pd = np.concatenate([np.ones((pd.shape[0], 1)), pd], axis=1)
 
-        self.auc = [auc(fa[i], pd[i]) for i in range(len(self.dis_thr))]
+        self.auc = [auc(fa[i], pd[i]) for i in range(len(self.dis_thrs))]
 
         if self.print_table:
             head = ['Dis—Thr']
-            head.extend(self.dis_thr.tolist())
+            head.extend(self.dis_thrs.tolist())
             table = PrettyTable()
             table.field_names = head
             auc_row = ['AUC-ROC']
@@ -164,17 +163,17 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
         return self.PD, self.FA, self.auc
 
     def reset(self) -> None:
-        self.FA = np.zeros((len(self.dis_thr), len(self.conf_thr)))
-        self.TD = np.zeros((len(self.dis_thr), len(self.conf_thr)))
-        self.FD = np.zeros((len(self.dis_thr), len(self.conf_thr)))
-        self.NP = np.zeros((len(self.dis_thr), len(self.conf_thr)))
-        self.AT = np.zeros((len(self.dis_thr), len(self.conf_thr)))
-        self.PD = np.zeros(len(self.dis_thr))
-        self.auc = np.zeros(len(self.dis_thr))
+        self.FA = np.zeros((len(self.dis_thrs), len(self.conf_thrs)))
+        self.TD = np.zeros((len(self.dis_thrs), len(self.conf_thrs)))
+        self.FD = np.zeros((len(self.dis_thrs), len(self.conf_thrs)))
+        self.NP = np.zeros((len(self.dis_thrs), len(self.conf_thrs)))
+        self.AT = np.zeros((len(self.dis_thrs), len(self.conf_thrs)))
+        self.PD = np.zeros(len(self.dis_thrs))
+        self.auc = np.zeros(len(self.dis_thrs))
 
     @property
     def table(self):
-        all_metric = np.vstack([self.dis_thr, self.auc])
+        all_metric = np.vstack([self.dis_thrs, self.auc])
         df = pd.DataFrame(all_metric)
         df.index = ['Dis-Thr', 'AUC-ROC']
         return df

@@ -12,7 +12,7 @@ from .utils import _TYPES, _safe_divide, convert2format
 
 class PixelPrecisionRecallF1IoU(BaseMetric):
 
-    def __init__(self, conf_thr: float, **kwargs: Any):
+    def __init__(self, conf_thr: float = 0.5, **kwargs: Any):
         """Pixel Level.
             Calculate Precision, Recall, F1, IoU for a given confidence threshold.
 
@@ -32,7 +32,7 @@ class PixelPrecisionRecallF1IoU(BaseMetric):
             doi={10.1109/TAES.2023.3238703}}
 
         Args:
-            bins (int, optional): score thresholds. Defaults to 30.
+            conf_thrs (int, optional): score thresholds. Defaults to 30.
         """
         super().__init__(**kwargs)
         self.conf_thr = conf_thr
