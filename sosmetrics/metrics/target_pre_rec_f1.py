@@ -185,9 +185,9 @@ class TargetPrecisionRecallF1(BaseMetric):
             for i in range(num_lbl):
                 for j in range(num_pred):
                     if distances[i, j] < threshold:
-                        distances[:, j] = np.inf  # Set inf to mark matched
+                        distances[:, j] = np.nan  # Set inf to mark matched
                         break
-            TP = distances[distances == np.inf].size // num_lbl
+            TP = distances[distances == np.nan].size // num_lbl
 
         else:
             raise ValueError(

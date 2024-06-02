@@ -137,7 +137,7 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                 for j in range(num_pred):
                     if distances[i, j] < threshold:
                         distances[:,
-                                  j] = np.inf  # Set inf to mark matched preds.
+                                  j] = np.nan  # Set inf to mark matched preds.
                         iou = np.append(iou, mask_iou[i, j])
                         break
         else:

@@ -201,12 +201,12 @@ class TargetPdPixelFa(BaseMetric):
                 for j in range(num_pred):
                     if distances[i, j] < threshold:
                         distances[:,
-                                  j] = np.inf  # Set inf to mark matched preds.
+                                  j] = np.nan  # Set inf to mark matched preds.
                         true_img[coord_pred[j].coords[:, 0],
                                  coord_pred[j].coords[:, 1]] = 1
                         break
             # get number of inf columns, is equal to TD
-            TD = distances[distances == np.inf].size // num_lbl
+            TD = distances[distances == np.nan].size // num_lbl
 
         else:
             raise ValueError(f'Unknown match_alg: {self.match_alg}')
