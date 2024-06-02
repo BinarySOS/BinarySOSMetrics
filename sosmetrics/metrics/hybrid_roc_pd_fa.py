@@ -69,12 +69,12 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
             second_match (str, optional): 'none' or 'mask_iou' to match pred and gt after distance matching. \
                 Defaults to 'none'.
         """
+        self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
         super().__init__(dis_thrs=dis_thrs,
                          conf_thr=0.5,
                          match_alg=match_alg,
                          second_match=second_match,
                          **kwargs)
-        self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
         self.lock = threading.Lock()
         self.reset()
 

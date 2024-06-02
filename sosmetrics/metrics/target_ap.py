@@ -44,13 +44,13 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
 
             Other parameters are the same as BinaryCenterMetric.
         """
+
+        self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
         super().__init__(dis_thrs=dis_thrs,
                          conf_thr=0.5,
                          match_alg=match_alg,
                          second_match=second_match,
                          **kwargs)
-
-        self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
         self.reset()
 
     @time_cost_deco
