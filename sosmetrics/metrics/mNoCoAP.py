@@ -370,7 +370,7 @@ def eval_mnocoap(det_centroids,
 
 class mNoCoAP(BaseMetric):
 
-    def __init__(self, conf_thr: float, **kwargs: Any):
+    def __init__(self, conf_thr: float=0.5, **kwargs: Any):
         super().__init__(**kwargs)
         self.conf_thr = conf_thr
         self.lock = threading.Lock()
@@ -382,6 +382,8 @@ class mNoCoAP(BaseMetric):
 
         def evaluate_worker(self, label: torch.Tensor, pred: torch.Tensor,
                             batch: torch.Tensor):
+            # pred = pred>self.conf_thr
+            # pred = pred.to(torch.int64)
             eval_mnocoap = self._compute_mnocoap_metrics(pred, label, batch)
             with self.lock:
                 self.total_mnocoap += eval_mnocoap
@@ -436,7 +438,7 @@ class mNoCoAP(BaseMetric):
         results = []
 
         for i in range(len(labels)):
-            pred_label = preds[i].squeeze().cpu().numpy()
+            pred_label = preds[i].squeeze().cpu().numpy().astype(np.int64)
             label = labels[i].squeeze().cpu().numpy()
             input = batch[i]
             input = gray_transform(input).squeeze().cpu().numpy()

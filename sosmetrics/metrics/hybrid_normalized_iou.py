@@ -58,14 +58,15 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                 print('____' * 20)
 
             if self.second_match == 'mask_iou':
-                mask_iou[mask_iou == 0.] = np.inf
-                mask_iou[mask_iou != np.inf] = 0.
-                distances = distances + mask_iou
+                tmp_mask_iou = mask_iou.copy()
+                tmp_mask_iou[tmp_mask_iou == 0.] = np.inf
+                tmp_mask_iou[tmp_mask_iou != np.inf] = 0.
+                distances = distances + tmp_mask_iou
 
                 if self.debug:
-                    print(f'after second match mask iou={mask_iou}')
+                    print(f'after second match mask iou={tmp_mask_iou}')
                     print(
-                        f'after second matche eul distance={distances + mask_iou}'
+                        f'after second matche eul distance={distances + tmp_mask_iou}'
                     )
                     print('____' * 20)
 
