@@ -89,3 +89,51 @@ def get_pred_coord_and_gray(
     pred_img = measure.label(cur_pred, connectivity=2)
     coord_pred = measure.regionprops(pred_img)
     return coord_pred, cur_pred
+
+
+def second_match_method(eul_dis: np.ndarray, mask_iou: np.ndarray,
+                        bbox_iou: np.ndarray, match_mode: str) -> np.ndarray:
+    """Second match func. Supports 4 secondary matching schemes.
+    1. mask: mask_iou is used to mark non-overlapping data pairs.
+    2. bbox: bbox_iou is used to mark non-overlapping data pairs.
+    3. mask_plus: will return the sum of eul_dis and (1-mask_iou).
+    4. bbox_plus: will return the sum of eul_dis and (1-bbox_iou).
+
+        The reason for adding (1-iou) is to maintain the same trend as distance, \
+            i.e., smaller means closer to gt.
+
+    Args:
+        eul_dis (np.ndarray): N*M matrix, N is number of gt, M is number of pred.
+        mask_iou (np.ndarray): Like eul_dis, but the value is mask_iou.
+        bbox_iou (np.ndarray): Like eul_dis, but the value is bbox_iou.
+        match_mode (str): 'mask', 'bbox', 'mask_plus' and 'bbox_plus'.
+
+    Returns:
+        np.ndarray: secondary matching results, N*M matrix, N is number of gt, M is number of pred.
+    """
+    eul_dis = eul_dis.copy()
+    mask_iou = mask_iou.copy()
+    bbox_iou = bbox_iou.copy()
+
+    if match_mode == 'mask':
+        mask_iou[mask_iou == 0.] = np.inf
+        mask_iou[mask_iou != np.inf] = 0.
+        distances = eul_dis + mask_iou
+
+    elif match_mode == 'bbox':
+        bbox_iou[bbox_iou == 0.] = np.inf
+        bbox_iou[bbox_iou != np.inf] = 0.
+        distances = eul_dis + bbox_iou
+
+    elif match_mode == 'mask_plus':
+        distances = eul_dis + (1 - mask_iou)
+
+    elif match_mode == 'bbox_plus':
+        distances = eul_dis + (1 - bbox_iou)
+
+    else:
+        raise ValueError(
+            "Invalid second match mode, second match mode should be one of ['mask', 'bbox', 'mask_plus', 'bbox_plus']"
+        )
+
+    return distances

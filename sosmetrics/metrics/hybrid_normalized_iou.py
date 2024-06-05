@@ -9,7 +9,8 @@ from sosmetrics.metrics import time_cost_deco
 from sosmetrics.metrics.utils import (_TYPES, _adjust_dis_thr_arg,
                                       _safe_divide, calculate_target_infos,
                                       convert2format, get_label_coord_and_gray,
-                                      get_pred_coord_and_gray)
+                                      get_pred_coord_and_gray,
+                                      second_match_method)
 
 from .pixel_normalized_iou import PixelNormalizedIoU
 
@@ -29,11 +30,23 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                 T is the number of ground truth targets, \
                 P is the number of predicted targets.
 
+        About Second Match:
+            Supports 4 secondary matching schemes.
+            1. mask: mask_iou is used to mark non-overlapping data pairs.
+            2. bbox: bbox_iou is used to mark non-overlapping data pairs.
+            3. mask_plus: will return the sum of eul_dis and (1-mask_iou).
+            4. bbox_plus: will return the sum of eul_dis and (1-bbox_iou).
+
+                The reason for adding (1-iou) is to maintain the same trend as distance, \
+                    i.e., smaller means closer to gt.
+
 
         Args:
             conf_thr (float, optional): _description_. Defaults to 0.5.
             dis_thrs (Union[List[int], int], optional): _description_. Defaults to [1, 10].
             match_alg (str, optional): Match algorithm. Defaults to 'forloop'.
+            second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
+                'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
         """
         self.dis_thrs = _adjust_dis_thr_arg(dis_thrs)
         self.match_alg = match_alg
@@ -57,17 +70,11 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                 print(f'eul_distance={distances}')
                 print('____' * 20)
 
-            if self.second_match == 'mask_iou':
-                tmp_mask_iou = mask_iou.copy()
-                tmp_mask_iou[tmp_mask_iou == 0.] = np.inf
-                tmp_mask_iou[tmp_mask_iou != np.inf] = 0.
-                distances = distances + tmp_mask_iou
-
+            if self.second_match != 'none':
+                distances = second_match_method(distances, mask_iou, bbox_iou,
+                                                self.second_match)
                 if self.debug:
-                    print(f'after second match mask iou={tmp_mask_iou}')
-                    print(
-                        f'after second matche eul distance={distances + tmp_mask_iou}'
-                    )
+                    print(f'After second matche eul distance={distances }')
                     print('____' * 20)
 
             for idx, threshold in enumerate(self.dis_thrs):

@@ -10,7 +10,8 @@ from .base import time_cost_deco
 from .hybrid_pd_fa import TargetPdPixelFa
 from .utils import (_TYPES, _adjust_conf_thr_arg, _safe_divide,
                     calculate_target_infos, convert2format,
-                    get_label_coord_and_gray, get_pred_coord_and_gray)
+                    get_label_coord_and_gray, get_pred_coord_and_gray,
+                    second_match_method)
 
 
 class TargetPdPixelFaROC(TargetPdPixelFa):
@@ -59,6 +60,16 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
         FD: The numbers of falsely predicted pixels, dismatch pixel, FD = NP - pixel_of_each_TD = FP * pixel_of_each_FP.
         FA: False-Alarm Rate, FA = FD/NP.
 
+        About Second Match:
+            Supports 4 secondary matching schemes.
+            1. mask: mask_iou is used to mark non-overlapping data pairs.
+            2. bbox: bbox_iou is used to mark non-overlapping data pairs.
+            3. mask_plus: will return the sum of eul_dis and (1-mask_iou).
+            4. bbox_plus: will return the sum of eul_dis and (1-bbox_iou).
+
+                The reason for adding (1-iou) is to maintain the same trend as distance, \
+                    i.e., smaller means closer to gt.
+
         Args:
             conf_thrs (float, Optional): Confidence threshold. Defaults to 0.5.
             dis_thrs (Union[List[int], int], optional): dis_thrs of Euclidean distance,
@@ -66,8 +77,8 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
             match_alg (str, optional):'forloop' to match pred and gt,
                 'forloop'is the original implementation of PD_FA,
                 based on the first-match principle. Defaults to 'forloop'
-            second_match (str, optional): 'none' or 'mask_iou' to match pred and gt after distance matching. \
-                Defaults to 'none'.
+            second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
+                'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
         """
         self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
         super().__init__(dis_thrs=dis_thrs,
@@ -98,16 +109,12 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
                     print(f'eul_distance={distances}')
                     print('____' * 20)
 
-                if self.second_match == 'mask_iou':
-                    mask_iou[mask_iou == 0.] = np.inf
-                    mask_iou[mask_iou != np.inf] = 0.
-                    distances = distances + mask_iou
-
+                if self.second_match != 'none':
+                    distances = second_match_method(distances, mask_iou,
+                                                    bbox_iou,
+                                                    self.second_match)
                     if self.debug:
-                        print(f'after second match mask iou={mask_iou}')
-                        print(
-                            f'after second matche eul distance={distances + mask_iou}'
-                        )
+                        print(f'After second matche eul distance={distances }')
                         print('____' * 20)
 
                 for jdx, threshold in enumerate(self.dis_thrs):

@@ -9,7 +9,7 @@ from .base import time_cost_deco
 from .target_pre_rec_f1 import TargetPrecisionRecallF1
 from .utils import (_TYPES, _adjust_conf_thr_arg, calculate_target_infos,
                     convert2format, get_label_coord_and_gray,
-                    get_pred_coord_and_gray)
+                    get_pred_coord_and_gray, second_match_method)
 
 
 class TargetAveragePrecision(TargetPrecisionRecallF1):
@@ -33,6 +33,16 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                 Step.2. AP:
                 https://github.com/Lightning-AI/torchmetrics/blob/3f112395b1ca0141ad2d8622628110fa363f9953/src/torchmetrics/functional/classification/average_precision.py#L70
 
+        About Second Match:
+            Supports 4 secondary matching schemes.
+            1. mask: mask_iou is used to mark non-overlapping data pairs.
+            2. bbox: bbox_iou is used to mark non-overlapping data pairs.
+            3. mask_plus: will return the sum of eul_dis and (1-mask_iou).
+            4. bbox_plus: will return the sum of eul_dis and (1-bbox_iou).
+
+                The reason for adding (1-iou) is to maintain the same trend as distance, \
+                    i.e., smaller means closer to gt.
+
          Args:
             cong_thr (float, optional):
                 - If set to an `int` (larger than 1), will use that number of thresholds linearly spaced from
@@ -41,7 +51,8 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                     in the list as conf_thrs for the calculation
                 - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
                 conf_thrs for the calculation.
-
+            second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
+                'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
             Other parameters are the same as BinaryCenterMetric.
         """
 
@@ -85,17 +96,13 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                     print(f'eul_distance={distances}')
                     print('____' * 20)
 
-                if self.second_match == 'mask_iou':
-                    mask_iou[mask_iou == 0.] = np.inf
-                    mask_iou[mask_iou != np.inf] = 0.
-                    distances = distances + mask_iou
-
-                    if self.debug:
-                        print(f'after second match mask iou={mask_iou}')
-                        print(
-                            f'after second matche eul distance={distances + mask_iou}'
-                        )
-                        print('____' * 20)
+                if self.second_match != 'none':
+                    distances = second_match_method(distances, mask_iou,
+                                                    bbox_iou,
+                                                    self.second_match)
+                if self.debug:
+                    print(f'After second matche eul distance={distances}')
+                    print('____' * 20)
 
                 for jdx, threshold in enumerate(self.dis_thrs):
                     TP, FN, FP = self._calculate_tp_fn_fp(
