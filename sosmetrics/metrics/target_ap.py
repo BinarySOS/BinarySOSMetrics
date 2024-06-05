@@ -53,7 +53,7 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                 conf_thrs for the calculation.
             second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
                 'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
-            Other parameters are the same as BinaryCenterMetric.
+            Other parameters are the same as TargetPrecisionRecallF1.
         """
 
         self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
@@ -173,6 +173,5 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
         return df
 
     def __repr__(self) -> str:
-        message = (f'{self.__class__.__name__}'
-                   f'(match_alg={self.match_alg})')
-        return message
+        return (f'{self.__class__.__name__}(match_alg={self.match_alg}, '
+                f'second_match={self.second_match})')

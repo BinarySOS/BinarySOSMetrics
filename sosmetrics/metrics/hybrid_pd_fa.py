@@ -4,6 +4,7 @@ from typing import Any, List, Tuple, Union
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
+from scipy.optimize import linear_sum_assignment
 from skimage.measure._regionprops import RegionProperties
 
 from .base import BaseMetric, time_cost_deco
@@ -75,9 +76,9 @@ class TargetPdPixelFa(BaseMetric):
             conf_thr (float, Optional): Confidence threshold. Defaults to 0.5.
             dis_thrs (Union[List[int], int], optional): dis_thrs of Euclidean distance,
                 if List, closed interval. . Defaults to [1,10].
-            match_alg (str, optional):'forloop' to match pred and gt,
+            match_alg (str, optional):Match algorithm, support 'hungarian' and 'forloop' to match pred and gt.\
                 'forloop'is the original implementation of PD_FA,
-                based on the first-match principle. Defaults to 'forloop'
+                based on the first-match principle. Defaults to 'forloop'.
             second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
                 'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
         """
@@ -215,6 +216,11 @@ class TargetPdPixelFa(BaseMetric):
             # get number of inf columns, is equal to TD
             TD = np.sum(np.isnan(distances)) // num_lbl
 
+        elif self.match_alg == 'hungarian':
+            row_indexes, col_indexes = linear_sum_assignment(distances)
+            selec_distance = distances[row_indexes, col_indexes]
+            TD = np.sum(selec_distance < threshold)
+
         else:
             raise ValueError(f'Unknown match_alg: {self.match_alg}')
 
@@ -225,4 +231,5 @@ class TargetPdPixelFa(BaseMetric):
 
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}(conf_thr={self.conf_thr}, '
-                f'match_alg={self.match_alg})')
+                f'match_alg={self.match_alg}, '
+                f'second_match={self.second_match})')

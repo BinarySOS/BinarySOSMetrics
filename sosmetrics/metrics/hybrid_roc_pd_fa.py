@@ -74,9 +74,9 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
             conf_thrs (float, Optional): Confidence threshold. Defaults to 0.5.
             dis_thrs (Union[List[int], int], optional): dis_thrs of Euclidean distance,
                 if List, closed interval. . Defaults to [1,10].
-            match_alg (str, optional):'forloop' to match pred and gt,
+            match_alg (str, optional):Match algorithm, support 'hungarian' and 'forloop' to match pred and gt.\
                 'forloop'is the original implementation of PD_FA,
-                based on the first-match principle. Defaults to 'forloop'
+                based on the first-match principle. Defaults to 'forloop'.
             second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
                 'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
         """
@@ -186,4 +186,5 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
         return df
 
     def __repr__(self) -> str:
-        return f'{self.__class__.__name__}(match_alg={self.match_alg})'
+        return (f'{self.__class__.__name__}(match_alg={self.match_alg}, '
+                f'second_match={self.second_match})')

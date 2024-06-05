@@ -4,6 +4,7 @@ from typing import Any, List, Tuple, Union
 import numpy as np
 import pandas as pd
 from prettytable import PrettyTable
+from scipy.optimize import linear_sum_assignment
 
 from .base import BaseMetric, time_cost_deco
 from .utils import (_TYPES, _adjust_dis_thr_arg, _safe_divide,
@@ -49,7 +50,7 @@ class TargetPrecisionRecallF1(BaseMetric):
                 if List, closed interval.
                 Defaults to [1, 10].
             cong_thr (float, optional): confidence threshold. Defaults to 0.5.
-            match_alg (str, optional): 'forloop' to match pred and gt, \
+            match_alg (str, optional):Match algorithm, support 'hungarian' and 'forloop' to match pred and gt.\
                 'forloop'is the original implementation of PD_FA,
                 based on the first-match principle. Defaults to 'forloop'.
             second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
@@ -196,6 +197,10 @@ class TargetPrecisionRecallF1(BaseMetric):
                         distances[:, j] = np.nan  # Set inf to mark matched
                         break
             TP = np.sum(np.isnan(distances)) // num_lbl
+        elif self.match_alg == 'hungarian':
+            row_indexes, col_indexes = linear_sum_assignment(distances)
+            selec_distance = distances[row_indexes, col_indexes]
+            TP = np.sum(selec_distance < threshold)
 
         else:
             raise ValueError(
@@ -216,7 +221,6 @@ class TargetPrecisionRecallF1(BaseMetric):
                                self.Precision + self.Recall)
 
     def __repr__(self) -> str:
-        message = (f'{self.__class__.__name__}'
-                   f'(match_alg={self.match_alg} '
-                   f'conf_thr={self.conf_thr})')
-        return message
+        return (f'{self.__class__.__name__}(conf_thr={self.conf_thr}, '
+                f'match_alg={self.match_alg}, '
+                f'second_match={self.second_match})')
