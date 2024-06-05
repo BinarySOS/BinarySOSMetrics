@@ -19,6 +19,7 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                  conf_thrs: Union[int, List[float], np.ndarray] = 10,
                  match_alg: str = 'forloop',
                  second_match: str = 'none',
+                 dilate_kernel: List[int] = [0, 0],
                  **kwargs: Any):
         """
         Compute AP for each dis_thrs, and Precision, Recall, F1 for each dis_thrs and conf_thrs.
@@ -44,16 +45,28 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                     i.e., smaller means closer to gt.
 
          Args:
-            cong_thr (float, optional):
+            dis_thrs (Union[List[float], int], optional): dis_thrs of Euclidean distance,
+                    - If set to an `int` , will use this value to distance threshold.
+                    - If set to an `list` of float or int, will use the indicated thresholds \
+                        in the list as conf_thr for the calculation
+                    - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
+                    conf_thr for the calculation.
+                    if List, closed interval.
+                    Defaults to [1, 10].
+            cong_thrs (float, optional):
                 - If set to an `int` (larger than 1), will use that number of thresholds linearly spaced from
                 0 to 1 as conf_thrs for the calculation.
                 - If set to an `list` of floats, will use the indicated thresholds \
                     in the list as conf_thrs for the calculation
                 - If set to an 1d `array` of floats, will use the indicated thresholds in the array as
                 conf_thrs for the calculation.
+            match_alg (str, optional):Match algorithm, support 'hungarian' and 'forloop' to match pred and gt.\
+                'forloop'is the original implementation of PD_FA,
+                based on the first-match principle. Defaults to 'forloop'.
             second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
                 'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
-            Other parameters are the same as TargetPrecisionRecallF1.
+            dilate_kernel (List[int]): Dilated kernel size for pred, [0, 0] means no dilate. Defaults to [0, 0].
+
         """
 
         self.conf_thrs = _adjust_conf_thr_arg(conf_thrs)
@@ -61,6 +74,7 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
                          conf_thr=0.5,
                          match_alg=match_alg,
                          second_match=second_match,
+                         dilate_kernel=dilate_kernel,
                          **kwargs)
         self.reset()
 
@@ -84,7 +98,7 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
 
             for idx, conf_thr in enumerate(self.conf_thrs):
                 coord_pred, gray_pred = get_pred_coord_and_gray(
-                    pred.copy(), conf_thr)
+                    pred.copy(), conf_thr, self.dilate_kernel)
 
                 distances, mask_iou, bbox_iou = calculate_target_infos(
                     coord_label, coord_pred, gray_pred.shape[0],

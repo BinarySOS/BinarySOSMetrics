@@ -1,5 +1,6 @@
 from typing import List, Tuple
 
+import cv2
 import numpy as np
 import torch
 from skimage import measure
@@ -67,6 +68,22 @@ def calculate_target_infos(coord_label: List[RegionProperties],
     return eul_distance, mask_iou, bbox_iou
 
 
+def _get_dilated(image: np.ndarray,
+                 dilate_kernel_size: List[int] = [0, 0]) -> np.ndarray:
+    """_summary_
+
+    Args:
+        image (np.ndarray): hwc of np.ndarray.
+    """
+
+    kernel = np.ones(dilate_kernel_size, np.uint8)
+    if kernel.sum() == 0:
+        return image
+    dilated_image = cv2.dilate(image, kernel, iterations=1)
+
+    return dilated_image
+
+
 def get_label_coord_and_gray(
         label: np.ndarray) -> Tuple[RegionProperties, np.ndarray]:
     cur_label = label > 0  # sometimes is 0-1, force to 255.
@@ -78,14 +95,19 @@ def get_label_coord_and_gray(
 
 
 def get_pred_coord_and_gray(
-    pred: np.ndarray,
-    conf_thr: float,
-) -> Tuple[RegionProperties, np.ndarray]:
+        pred: np.ndarray,
+        conf_thr: float,
+        dilate_kernel: List[int] = [0,
+                                    0]) -> Tuple[RegionProperties, np.ndarray]:
     cur_pred = pred >= conf_thr
     cur_pred = cur_pred.astype('uint8')
     # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
     # 'int64' is for measure.label().
-    cur_pred = convert2gray(cur_pred).astype('int64')
+    cur_pred = convert2gray(cur_pred)
+    if dilate_kernel != [0, 0]:
+        cur_pred = _get_dilated(cur_pred, dilate_kernel).astype('int64')
+    else:
+        cur_pred = cur_pred.astype('int64')
     pred_img = measure.label(cur_pred, connectivity=2)
     coord_pred = measure.regionprops(pred_img)
     return coord_pred, cur_pred
