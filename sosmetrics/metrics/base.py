@@ -1,5 +1,4 @@
 import time
-from typing import Any
 
 from .utils import _TYPES
 
@@ -36,14 +35,15 @@ def time_cost_deco(func):
 
 class BaseMetric:
 
-    def __init__(self, **kwargs: Any):
+    def __init__(self, debug: bool = False, print_table: bool = True):
         """
         Args:
             debug (bool): Debug mode. if True, print process time. Default is False.
             print_table (bool): Print table, if True, print table. Default is True.
         """
-        self.debug = kwargs.get('debug', False)
-        self.print_table = kwargs.get('print_table', True)
+
+        self.debug = debug
+        self.print_table = print_table
         self.time_cost = []
 
     @time_cost_deco
