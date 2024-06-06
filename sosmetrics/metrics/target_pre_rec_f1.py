@@ -206,9 +206,14 @@ class TargetPrecisionRecallF1(BaseMetric):
                         break
             TP = np.sum(np.isnan(distances)) // num_lbl
         elif self.match_alg == 'hungarian':
-            row_indexes, col_indexes = linear_sum_assignment(distances)
-            selec_distance = distances[row_indexes, col_indexes]
-            TP = np.sum(selec_distance < threshold)
+            if np.all(np.isinf(distances)):
+                # fix cost matrix feasible, like [[np.inf, np.inf]].
+                TP = 0
+            else:
+                row_indexes, col_indexes = linear_sum_assignment(distances)
+                selec_distance = distances[row_indexes, col_indexes]
+                matched = selec_distance < threshold
+                TP = np.sum(matched)
 
         else:
             raise ValueError(
@@ -231,4 +236,5 @@ class TargetPrecisionRecallF1(BaseMetric):
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}(conf_thr={self.conf_thr}, '
                 f'match_alg={self.match_alg}, '
-                f'second_match={self.second_match})')
+                f'second_match={self.second_match}, '
+                f'dilate_kernel={self.dilate_kernel})')

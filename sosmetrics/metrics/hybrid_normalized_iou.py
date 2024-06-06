@@ -163,12 +163,16 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
                         break
 
         elif self.match_alg == 'hungarian':
-            row_indexes, col_indexes = linear_sum_assignment(distances)
-            selec_distance = distances[row_indexes, col_indexes]
-            matched = selec_distance < threshold
-            for i, j in zip(row_indexes[matched], col_indexes[matched]
-                            ):  # col_indexes present matched pred index.
-                iou = np.append(iou, mask_iou[i, j])
+            if np.all(np.isinf(distances)):
+                # fix cost matrix feasible, like [[np.inf, np.inf]].
+                pass
+            else:
+                row_indexes, col_indexes = linear_sum_assignment(distances)
+                selec_distance = distances[row_indexes, col_indexes]
+                matched = selec_distance < threshold
+                for i, j in zip(row_indexes[matched], col_indexes[matched]
+                                ):  # col_indexes present matched pred index.
+                    iou = np.append(iou, mask_iou[i, j])
         else:
             raise ValueError(f'Unknown match_alg: {self.match_alg}')
         return iou
@@ -176,4 +180,5 @@ class HybridNormalizedIoU(PixelNormalizedIoU):
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}(conf_thr={self.conf_thr}, '
                 f'match_alg={self.match_alg}, '
-                f'second_match={self.second_match})')
+                f'second_match={self.second_match}, '
+                f'dilate_kernel={self.dilate_kernel})')

@@ -221,14 +221,22 @@ class TargetPdPixelFa(BaseMetric):
                         true_img[coord_pred[j].coords[:, 0],
                                  coord_pred[j].coords[:, 1]] = 1
                         break
-            # get number of inf columns, is equal to TD
+            # get number of nan columns, is equal to TD
             TD = np.sum(np.isnan(distances)) // num_lbl
 
         elif self.match_alg == 'hungarian':
-            row_indexes, col_indexes = linear_sum_assignment(distances)
-            selec_distance = distances[row_indexes, col_indexes]
-            TD = np.sum(selec_distance < threshold)
-
+            if np.all(np.isinf(distances)):
+                # fix cost matrix feasible, like [[np.inf, np.inf]].
+                TD = 0
+            else:
+                row_indexes, col_indexes = linear_sum_assignment(distances)
+                selec_distance = distances[row_indexes, col_indexes]
+                matched = selec_distance < threshold
+                for j in col_indexes[
+                        matched]:  # col_indexes present matched pred index.
+                    true_img[coord_pred[j].coords[:, 0],
+                             coord_pred[j].coords[:, 1]] = 1
+                TD = np.sum(matched)
         else:
             raise ValueError(f'Unknown match_alg: {self.match_alg}')
 
@@ -240,4 +248,5 @@ class TargetPdPixelFa(BaseMetric):
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}(conf_thr={self.conf_thr}, '
                 f'match_alg={self.match_alg}, '
-                f'second_match={self.second_match})')
+                f'second_match={self.second_match}, '
+                f'dilate_kernel={self.dilate_kernel})')

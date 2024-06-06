@@ -193,4 +193,5 @@ class TargetAveragePrecision(TargetPrecisionRecallF1):
 
     def __repr__(self) -> str:
         return (f'{self.__class__.__name__}(match_alg={self.match_alg}, '
-                f'second_match={self.second_match})')
+                f'second_match={self.second_match}, '
+                f'dilate_kernel={self.dilate_kernel})')
