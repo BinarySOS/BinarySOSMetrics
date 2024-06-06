@@ -1,4 +1,4 @@
-from typing import List, Tuple
+from typing import List, Tuple, Union
 
 import cv2
 import numpy as np
@@ -68,19 +68,28 @@ def calculate_target_infos(coord_label: List[RegionProperties],
     return eul_distance, mask_iou, bbox_iou
 
 
-def _get_dilated(image: np.ndarray,
-                 dilate_kernel_size: List[int] = [0, 0]) -> np.ndarray:
+def _get_dilated(
+        image: np.ndarray,
+        dilate_kernel_size: Union[List[int], int] = [0, 0]) -> np.ndarray:
     """_summary_
 
     Args:
         image (np.ndarray): hwc of np.ndarray.
     """
 
-    kernel = np.ones(dilate_kernel_size, np.uint8)
-    if kernel.sum() == 0:
-        return image
-    dilated_image = cv2.dilate(image, kernel, iterations=1)
+    if isinstance(dilate_kernel_size, int):
+        selem = cv2.getStructuringElement(
+            cv2.MORPH_ELLIPSE, (dilate_kernel_size, dilate_kernel_size))
+    elif isinstance(dilate_kernel_size, (list, tuple)):
+        selem = cv2.getStructuringElement(cv2.MORPH_RECT, dilate_kernel_size)
+    else:
+        raise ValueError(
+            f'dilate_kernel_size must be a list or a tuple or an int, '
+            f'but got {type(dilate_kernel_size)}')
 
+    if selem.sum() == 0:
+        return image
+    dilated_image = cv2.dilate(image, selem, iterations=1)
     return dilated_image
 
 
@@ -95,16 +104,17 @@ def get_label_coord_and_gray(
 
 
 def get_pred_coord_and_gray(
-        pred: np.ndarray,
-        conf_thr: float,
-        dilate_kernel: List[int] = [0,
-                                    0]) -> Tuple[RegionProperties, np.ndarray]:
+    pred: np.ndarray,
+    conf_thr: float,
+    dilate_kernel: Union[List[int], int] = [0, 0]
+) -> Tuple[RegionProperties, np.ndarray]:
+
     cur_pred = pred >= conf_thr
     cur_pred = cur_pred.astype('uint8')
     # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
     # 'int64' is for measure.label().
     cur_pred = convert2gray(cur_pred)
-    if dilate_kernel != [0, 0]:
+    if dilate_kernel != [0, 0] or dilate_kernel != 0:
         cur_pred = _get_dilated(cur_pred, dilate_kernel).astype('int64')
     else:
         cur_pred = cur_pred.astype('int64')

@@ -20,7 +20,7 @@ class TargetPrecisionRecallF1(BaseMetric):
                  conf_thr: float = 0.5,
                  match_alg: str = 'forloop',
                  second_match: str = 'none',
-                 dilate_kernel: List[int] = [0, 0],
+                 dilate_kernel: Union[List[int], int] = [0, 0],
                  **kwargs: Any):
         """
         TP: True Positive, GT is Positive and Pred is Positive, If Euclidean Distance < threshold, matched.
@@ -56,7 +56,10 @@ class TargetPrecisionRecallF1(BaseMetric):
                 based on the first-match principle. Defaults to 'forloop'.
             second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
                 'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
-            dilate_kernel (List[int]): Dilated kernel size for pred, [0, 0] means no dilate. Defaults to [0, 0].
+            dilate_kernel (Union[List[int], int], optional): Dilated kernel size, support Rect and Circle, \
+                [0, 0] or 0 means no dilate; \
+                list of int means Rect dilated kernel, like [3, 3] or [3,4]; \
+                int means radius of Circle dilated kernel. Defaults to [0, 0].
         """
 
         super().__init__(**kwargs)
