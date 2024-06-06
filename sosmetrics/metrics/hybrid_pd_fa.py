@@ -21,6 +21,7 @@ class TargetPdPixelFa(BaseMetric):
                  dis_thrs: Union[List[int], int] = [1, 10],
                  match_alg: str = 'forloop',
                  second_match: str = 'none',
+                 dilate_kernel: List[int] = [0, 0],
                  **kwargs: Any):
         """
         Target Level Pd and Pixel Level Fa.
@@ -87,6 +88,7 @@ class TargetPdPixelFa(BaseMetric):
         self.conf_thr = np.array([conf_thr])
         self.match_alg = match_alg
         self.second_match = second_match
+        self.dilate_kernel = dilate_kernel
         self.lock = threading.Lock()
         self.reset()
 
@@ -97,7 +99,7 @@ class TargetPdPixelFa(BaseMetric):
             # to unit8 for ``convert2gray()``
             coord_label, gray_label = get_label_coord_and_gray(label)
             coord_pred, gray_pred = get_pred_coord_and_gray(
-                pred.copy(), self.conf_thr)
+                pred.copy(), self.conf_thr, self.dilate_kernel)
             distances, mask_iou, bbox_iou = calculate_target_infos(
                 coord_label, coord_pred, gray_pred.shape[0],
                 gray_pred.shape[1])
