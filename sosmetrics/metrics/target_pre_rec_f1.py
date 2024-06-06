@@ -59,7 +59,7 @@ class TargetPrecisionRecallF1(BaseMetric):
             dilate_kernel (Union[List[int], int], optional): Dilated kernel size, support Rect and Circle, \
                 [0, 0] or 0 means no dilate; \
                 list of int means Rect dilated kernel, like [3, 3] or [3,4]; \
-                int means radius of Circle dilated kernel. Defaults to [0, 0].
+                int means diameter of Circle dilated kernel. Defaults to [0, 0].
         """
 
         super().__init__(**kwargs)
