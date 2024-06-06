@@ -114,7 +114,7 @@ def get_pred_coord_and_gray(
     # sometimes mask and label are read from cv2.imread() in default params, have 3 channels.
     # 'int64' is for measure.label().
     cur_pred = convert2gray(cur_pred)
-    if dilate_kernel != [0, 0] or dilate_kernel != 0:
+    if dilate_kernel != [0, 0] and dilate_kernel != 0:
         cur_pred = _get_dilated(cur_pred, dilate_kernel).astype('int64')
     else:
         cur_pred = cur_pred.astype('int64')
@@ -125,20 +125,23 @@ def get_pred_coord_and_gray(
 
 def second_match_method(eul_dis: np.ndarray, mask_iou: np.ndarray,
                         bbox_iou: np.ndarray, match_mode: str) -> np.ndarray:
-    """Second match func. Supports 4 secondary matching schemes.
-    1. mask: mask_iou is used to mark non-overlapping data pairs.
-    2. bbox: bbox_iou is used to mark non-overlapping data pairs.
-    3. mask_plus: will return the sum of eul_dis and (1-mask_iou).
-    4. bbox_plus: will return the sum of eul_dis and (1-bbox_iou).
+    """Second match func.
+        Supports 4 secondary matching schemes.
+        1. mask: mask_iou is used to mark non-overlapping data pairs.
+        2. bbox: bbox_iou is used to mark non-overlapping data pairs.
+        3. plus_mask: Enhanced version of 'mask', will return a result that adding new conditions to 'mask' mode, \
+            the sum of eul_dis and (1-mask_iou).
+        4. plus_bbox: Enhanced version of 'bbox', will return a result that adding new conditions to 'bbox' mode, \
+            the sum of eul_dis and (1-bbox_iou).
 
-        The reason for adding (1-iou) is to maintain the same trend as distance, \
-            i.e., smaller means closer to gt.
+            The reason for adding (1-iou) is to maintain the same trend as distance, \
+                i.e., smaller means closer to gt.
 
     Args:
         eul_dis (np.ndarray): N*M matrix, N is number of gt, M is number of pred.
         mask_iou (np.ndarray): Like eul_dis, but the value is mask_iou.
         bbox_iou (np.ndarray): Like eul_dis, but the value is bbox_iou.
-        match_mode (str): 'mask', 'bbox', 'mask_plus' and 'bbox_plus'.
+        match_mode (str): 'mask', 'bbox', 'plus_mask' and 'plus_bbox'.
 
     Returns:
         np.ndarray: secondary matching results, N*M matrix, N is number of gt, M is number of pred.
@@ -157,15 +160,17 @@ def second_match_method(eul_dis: np.ndarray, mask_iou: np.ndarray,
         bbox_iou[bbox_iou != np.inf] = 0.
         distances = eul_dis + bbox_iou
 
-    elif match_mode == 'mask_plus':
+    elif match_mode == 'plus_mask':
+        mask_iou[mask_iou == 0.] = -np.inf
         distances = eul_dis + (1 - mask_iou)
 
-    elif match_mode == 'bbox_plus':
+    elif match_mode == 'plus_bbox':
+        bbox_iou[bbox_iou == 0.] = -np.inf
         distances = eul_dis + (1 - bbox_iou)
 
     else:
         raise ValueError(
-            "Invalid second match mode, second match mode should be one of ['mask', 'bbox', 'mask_plus', 'bbox_plus']"
+            "Invalid second match mode, second match mode should be one of ['mask', 'bbox', 'plus_mask', 'plus_bbox']"
         )
 
     return distances

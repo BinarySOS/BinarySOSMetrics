@@ -65,11 +65,13 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
             Supports 4 secondary matching schemes.
             1. mask: mask_iou is used to mark non-overlapping data pairs.
             2. bbox: bbox_iou is used to mark non-overlapping data pairs.
-            3. mask_plus: will return the sum of eul_dis and (1-mask_iou).
-            4. bbox_plus: will return the sum of eul_dis and (1-bbox_iou).
+            3. plus_mask: Enhanced version of 'mask', will return a result that adding new conditions to 'mask' mode, \
+                the sum of eul_dis and (1-mask_iou).
+            4. plus_bbox: Enhanced version of 'bbox', will return a result that adding new conditions to 'bbox' mode, \
+                the sum of eul_dis and (1-bbox_iou).
 
-                The reason for adding (1-iou) is to maintain the same trend as distance, \
-                    i.e., smaller means closer to gt.
+            The reason for adding (1-iou) is to maintain the same trend as distance, \
+                i.e., smaller means closer to gt.
 
         Args:
             conf_thrs (float, Optional): Confidence threshold. Defaults to 0.5.
@@ -79,7 +81,7 @@ class TargetPdPixelFaROC(TargetPdPixelFa):
                 'forloop'is the original implementation of PD_FA,
                 based on the first-match principle. Defaults to 'forloop'.
             second_match (str, optional): Second match algorithm, support 'none', 'mask', 'bbox', \
-                'mask_plus' and 'bbox_plus', 'none' means no secondary matching. Defaults to 'none'.
+                'plus_mask' and 'plus_bbox', 'none' means no secondary matching. Defaults to 'none'.
             dilate_kernel (Union[List[int], int], optional): Dilated kernel size, support Rect and Circle, \
                 [0, 0] or 0 means no dilate; \
                 list of int means Rect dilated kernel, like [3, 3] or [3,4]; \
