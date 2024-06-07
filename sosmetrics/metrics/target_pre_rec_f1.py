@@ -156,6 +156,9 @@ class TargetPrecisionRecallF1(BaseMetric):
                          ['{:.5f}'.format(num) for num in self.F1])
         print(table)
 
+        self.mean_Precision = self.Precision.mean()
+        self.mean_Recall = self.Recall.mean()
+        self.mean_F1 = self.F1.mean()
         return self.Precision, self.Recall, self.F1
 
     def reset(self):
@@ -165,17 +168,32 @@ class TargetPrecisionRecallF1(BaseMetric):
         self.Precision = np.zeros_like(self.dis_thrs)
         self.Recall = np.zeros_like(self.dis_thrs)
         self.F1 = np.zeros_like(self.dis_thrs)
+        self.mean_Precision = np.zeros_like(self.dis_thrs)
+        self.mean_Recall = np.zeros_like(self.dis_thrs)
+        self.mean_F1 = np.zeros_like(self.dis_thrs)
 
     @property
     def table(self):
         all_metric = np.stack([
             self.dis_thrs, self.TP, self.FP, self.FN, self.Precision,
-            self.Recall, self.F1
+            self.Recall, self.F1,
+            self.mean_Precision.reshape(1, ).repeat(len(self.dis_thrs)),
+            self.mean_Recall.reshape(1, ).repeat(len(self.dis_thrs)),
+            self.mean_F1.reshape(1, ).repeat(len(self.dis_thrs))
         ],
                               axis=1)
         df = pd.DataFrame(all_metric)
         df.columns = [
-            'dis_thrs', 'TP', 'FP', 'FN', 'Precision', 'Recall', 'F1'
+            'dis_thrs',
+            'TP',
+            'FP',
+            'FN',
+            'Precision',
+            'Recall',
+            'F1',
+            'mean_Precision',
+            'mean_Recall',
+            'mean_F1',
         ]
         return df
 
