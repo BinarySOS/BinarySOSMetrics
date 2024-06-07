@@ -225,18 +225,16 @@ class TargetPdPixelFa(BaseMetric):
             TD = np.sum(np.isnan(distances)) // num_lbl
 
         elif self.match_alg == 'hungarian':
-            if np.all(np.isinf(distances)):
-                # fix cost matrix feasible, like [[np.inf, np.inf]].
-                TD = 0
-            else:
-                row_indexes, col_indexes = linear_sum_assignment(distances)
-                selec_distance = distances[row_indexes, col_indexes]
-                matched = selec_distance < threshold
-                for j in col_indexes[
-                        matched]:  # col_indexes present matched pred index.
-                    true_img[coord_pred[j].coords[:, 0],
-                             coord_pred[j].coords[:, 1]] = 1
-                TD = np.sum(matched)
+            # fix feasible in hungarian
+            distances[np.isinf(distances)] = 1e10
+            row_indexes, col_indexes = linear_sum_assignment(distances)
+            selec_distance = distances[row_indexes, col_indexes]
+            matched = selec_distance < threshold
+            for j in col_indexes[
+                    matched]:  # col_indexes present matched pred index.
+                true_img[coord_pred[j].coords[:, 0],
+                         coord_pred[j].coords[:, 1]] = 1
+            TD = np.sum(matched)
         else:
             raise ValueError(f'Unknown match_alg: {self.match_alg}')
 

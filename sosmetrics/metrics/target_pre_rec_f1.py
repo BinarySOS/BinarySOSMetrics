@@ -120,18 +120,18 @@ class TargetPrecisionRecallF1(BaseMetric):
 
         labels, preds = convert2format(labels, preds)
 
-        # for i in range(len(labels)):
-        #     evaluate_worker(labels[i], preds[i])
-        threads = [
-            threading.Thread(
-                target=evaluate_worker,
-                args=(self, labels[i], preds[i]),
-            ) for i in range(len(labels))
-        ]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join()
+        for i in range(len(labels)):
+            evaluate_worker(self, labels[i], preds[i])
+        # threads = [
+        #     threading.Thread(
+        #         target=evaluate_worker,
+        #         args=(self, labels[i], preds[i]),
+        #     ) for i in range(len(labels))
+        # ]
+        # for thread in threads:
+        #     thread.start()
+        # for thread in threads:
+        #     thread.join()
 
     @time_cost_deco
     def get(self):
@@ -224,14 +224,12 @@ class TargetPrecisionRecallF1(BaseMetric):
                         break
             TP = np.sum(np.isnan(distances)) // num_lbl
         elif self.match_alg == 'hungarian':
-            if np.all(np.isinf(distances)):
-                # fix cost matrix feasible, like [[np.inf, np.inf]].
-                TP = 0
-            else:
-                row_indexes, col_indexes = linear_sum_assignment(distances)
-                selec_distance = distances[row_indexes, col_indexes]
-                matched = selec_distance < threshold
-                TP = np.sum(matched)
+            # fix feasible in hungarian
+            distances[np.isinf(distances)] = 1e10
+            row_indexes, col_indexes = linear_sum_assignment(distances)
+            selec_distance = distances[row_indexes, col_indexes]
+            matched = selec_distance < threshold
+            TP = np.sum(matched)
 
         else:
             raise ValueError(
